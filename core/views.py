@@ -171,20 +171,16 @@ def logout_view(request: HttpRequest) -> HttpResponse:
 
 
 def _ensure_user_approved(request: HttpRequest) -> bool:
-    """Проверяет, одобрен ли пользователь. Если нет — показывает сообщение (раз за сессию) и возвращает False."""
+    """Проверяет, одобрен ли пользователь. Если нет — показывает сообщение и возвращает False."""
     user = request.user
-    if getattr(user, "status", None) == "approved":
-        request.session.pop("approval_warning_shown", None)
-        return True
-    # Показываем предупреждение только один раз за сессию, чтобы не дублировать при каждом клике
-    if not request.session.get("approval_warning_shown"):
-        request.session["approval_warning_shown"] = True
+    if getattr(user, "status", None) != "approved":
         messages.warning(
             request,
             "Ваш аккаунт ещё не одобрен. Дождитесь одобрения от администратора, "
             "после чего функции кабинета станут доступны.",
         )
-    return False
+        return False
+    return True
 
 
 @login_required
