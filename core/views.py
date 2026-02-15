@@ -7,6 +7,7 @@ from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
 from django.db.models import F, Max, Q
 from django.db import transaction
+from django.db.utils import OperationalError, ProgrammingError
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
@@ -436,10 +437,13 @@ def _lead_exists_globally(raw_contact: str, exclude_lead_id: int | None = None) 
     normalized = normalize_lead_contact(raw_contact)
     if not normalized:
         return False
-    qs = Lead.objects.filter(normalized_contact=normalized)
-    if exclude_lead_id is not None:
-        qs = qs.exclude(pk=exclude_lead_id)
-    return qs.exists()
+    try:
+        qs = Lead.objects.filter(normalized_contact=normalized)
+        if exclude_lead_id is not None:
+            qs = qs.exclude(pk=exclude_lead_id)
+        return qs.exists()
+    except (OperationalError, ProgrammingError):
+        return False
 
 
 @login_required
@@ -459,19 +463,33 @@ def leads_report_placeholder(request: HttpRequest) -> HttpResponse:
                     "Такой контакт уже есть в базе отчётов (у вас или другого пользователя). Дубликаты не принимаются — один контакт можно отправить только один раз.",
                 )
             else:
-                lead: Lead = form.save(commit=False)
-                lead.user = user
-                lead.source = lead.raw_contact.strip() or ""
-                lead.normalized_contact = normalize_lead_contact(lead.raw_contact)
-                lead.base_type = determine_base_type_for_contact(lead.raw_contact.strip(), user)
-                contact_qs = Contact.objects.filter(value=lead.raw_contact.strip())
-                if lead.base_type:
-                    contact_qs = contact_qs.filter(base_type=lead.base_type)
-                lead.contact = contact_qs.first()
-                lead.save()
-                compress_lead_attachment(lead)
-                messages.success(request, "Лид сохранён. Можете добавить ещё один.")
-                form = LeadReportForm()
+                try:
+                    lead: Lead = form.save(commit=False)
+                    lead.user = user
+                    raw_safe = (lead.raw_contact or "").strip()
+                    lead.source = raw_safe or ""
+                    lead.normalized_contact = normalize_lead_contact(lead.raw_contact or "")
+                    lead.base_type = determine_base_type_for_contact(raw_safe, user)
+                    contact_qs = Contact.objects.filter(value=raw_safe)
+                    if lead.base_type:
+                        contact_qs = contact_qs.filter(base_type=lead.base_type)
+                    lead.contact = contact_qs.first()
+                    lead.save()
+                    compress_lead_attachment(lead)
+                    messages.success(request, "Лид сохранён. Можете добавить ещё один.")
+                    form = LeadReportForm()
+                except (OperationalError, ProgrammingError) as e:
+                    logger.exception("Ошибка БД при сохранении лида (возможно не применена миграция 0013): %s", e)
+                    messages.error(
+                        request,
+                        "Ошибка базы данных. Убедитесь, что выполнены миграции: python manage.py migrate",
+                    )
+                except Exception as e:
+                    logger.exception("Ошибка при сохранении лида (отчёт): %s", e)
+                    messages.error(
+                        request,
+                        "Не удалось сохранить отчёт. Попробуйте ещё раз или обратитесь в поддержку.",
+                    )
     else:
         form = LeadReportForm()
 
