@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Статистика лидов — Партнёрка{% endblock %}
+
+{% block content %}
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h1 class="h4 mb-0">Статистика лидов</h1>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard' %}">← В кабинет</a>
+  </div>
+
+  <p class="text-muted">
+    Сводка по лидам с учётом логики «дня» как в боте (граница в 20:00 по Москве).
+  </p>
+
+  <div class="row g-3 mt-2">
+    <div class="col-md-4">
+      <div class="card shadow-sm">
+        <div class="card-body text-center">
+          <div class="h1 mb-1">{{ today_count }}</div>
+          <div class="text-muted small">За сегодня</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card shadow-sm">
+        <div class="card-body text-center">
+          <div class="h1 mb-1">{{ yesterday_count }}</div>
+          <div class="text-muted small">За вчера</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card shadow-sm">
+        <div class="card-body text-center">
+          <div class="h1 mb-1">{{ total_count }}</div>
+          <div class="text-muted small">За всё время</div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+

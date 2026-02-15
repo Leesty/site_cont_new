@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Баланс — @{{ target_user.username }} — Партнёрка{% endblock %}
+
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">Баланс: @{{ target_user.username }}</h1>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'admin_all_users' %}">← Все пользователи</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard' %}">← В кабинет</a>
+    </div>
+  </div>
+
+  <p class="text-muted small mb-3">
+    Текущий баланс: <strong>{{ target_user.balance|default:0 }}</strong> руб.
+  </p>
+
+  <div class="card shadow-sm" style="max-width: 28rem;">
+    <div class="card-body">
+      <h2 class="h6 mb-3">Начислить или списать (руб.)</h2>
+      <form method="post" action="">
+        {% csrf_token %}
+        <div class="mb-3">
+          <label for="id_amount" class="form-label">Сумма (руб.)</label>
+          <input type="number" name="amount" id="id_amount" class="form-control" min="1" step="1" required placeholder="0">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Действие</label>
+          <div class="d-flex gap-3">
+            <div class="form-check">
+              <input type="radio" name="action" id="action_add" value="add" class="form-check-input" checked>
+              <label for="action_add" class="form-check-label">Начислить</label>
+            </div>
+            <div class="form-check">
+              <input type="radio" name="action" id="action_subtract" value="subtract" class="form-check-input">
+              <label for="action_subtract" class="form-check-label">Списать</label>
+            </div>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Применить</button>
+      </form>
+    </div>
+  </div>
+{% endblock %}

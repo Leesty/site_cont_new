@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Личный кабинет — Партнёрка{% endblock %}
+
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h1 class="h4 mb-1">Личный кабинет</h1>
+      <p class="text-muted small mb-0">
+        Добро пожаловать, {{ user.username }}. Здесь собраны все инструменты работы с базами и лидами.
+      </p>
+    </div>
+    <div class="text-end d-flex flex-column flex-md-row align-items-end gap-2">
+      <span class="badge bg-primary fs-6 px-3 py-2">Баланс: {{ user.balance|default:0 }} руб.</span>
+      {% if withdrawal_pending %}
+        <span class="badge bg-warning text-dark">Заявка на вывод на рассмотрении</span>
+      {% elif can_request_withdrawal %}
+        <a class="btn btn-success btn-sm" href="{% url 'request_withdrawal_create' %}">Запросить вывод</a>
+      {% endif %}
+    </div>
+  </div>
+  {% if can_request_withdrawal and not withdrawal_pending %}
+    <p class="text-muted small mb-2">
+      Вывод от {{ withdrawal_min_balance }} рублей. При подаче заявки баланс обнулится; после решения админа средства будут переведены или возвращены на баланс.
+    </p>
+  {% endif %}
+
+  <div class="row row-cols-1 row-cols-md-2 g-3 mt-2 dashboard-grid">
+    <div class="col">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="card-icon contacts mb-2">
+            📦
+          </div>
+          <h2 class="h5 mb-2">Получить списки контактов</h2>
+          <p class="text-muted small mb-3">
+            Выдача новых контактов из доступных баз с учётом лимитов и дополнительных квот.
+          </p>
+          <a class="btn btn-outline-primary btn-sm" href="{% url 'contacts' %}">Перейти</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="card-icon leads mb-2">
+            📋
+          </div>
+          <h2 class="h5 mb-2">Мои лиды</h2>
+          <p class="text-muted small mb-3">
+            Список ваших лидов, статусы проверки. Одобренные лиды оплачиваются автоматически.
+          </p>
+          <a class="btn btn-outline-primary btn-sm" href="{% url 'leads_my_list' %}">Перейти</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="card-icon report mb-2">
+            📄
+          </div>
+          <h2 class="h5 mb-2">Отчёт по лидам</h2>
+          <p class="text-muted small mb-3">
+            Загрузка файлов и скриншотов, фиксация результатов работы по каждому контакту.
+          </p>
+          <a class="btn btn-outline-primary btn-sm" href="{% url 'leads_report' %}">Перейти</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="card-icon stats mb-2">
+            📊
+          </div>
+          <h2 class="h5 mb-2">Статистика лидов</h2>
+          <p class="text-muted small mb-3">
+            Сводка по вашим лидам за сегодня, вчера и всё время с учётом «сдвинутого» дня.
+          </p>
+          <a class="btn btn-outline-primary btn-sm" href="{% url 'leads_stats' %}">Перейти</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="card-icon support mb-2">
+            💬
+          </div>
+          <h2 class="h5 mb-2">
+            Чат с поддержкой
+            <span id="support-unread-badge" class="badge bg-danger ms-1" style="{% if not support_has_unread %}display:none;{% endif %}">Новое сообщение</span>
+          </h2>
+          <p class="text-muted small mb-3">
+            Вопросы и заявки — напишите в чат, приложите скриншот при необходимости.
+          </p>
+          <a class="btn btn-outline-primary btn-sm" href="{% url 'support' %}">Перейти</a>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+

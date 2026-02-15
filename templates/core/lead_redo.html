@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Доработка лида #{{ lead.id }} — Партнёрка{% endblock %}
+
+{% block content %}
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h1 class="h4 mb-0">Доработка лида #{{ lead.id }}</h1>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard' %}">← В кабинет</a>
+  </div>
+
+  {% if lead.rework_comment %}
+    <div class="alert alert-warning mb-3">
+      <strong>Что нужно доработать:</strong><br>{{ lead.rework_comment }}
+    </div>
+  {% endif %}
+
+  <p class="text-muted mb-3">
+    Исправьте контакт/ссылку, комментарий или загрузите новый скриншот/видео. После отправки лид снова попадёт на проверку.
+  </p>
+
+  <form method="post" enctype="multipart/form-data" class="mb-3">
+    {% csrf_token %}
+    <div class="mb-3">
+      <label class="form-label" for="id_raw_contact">{{ form.raw_contact.label }}</label>
+      {{ form.raw_contact }}
+      {% if form.raw_contact.help_text %}<div class="form-text">{{ form.raw_contact.help_text }}</div>{% endif %}
+      {% if form.raw_contact.errors %}<div class="text-danger small">{% for error in form.raw_contact.errors %}{{ error }}{% endfor %}</div>{% endif %}
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="id_comment">{{ form.comment.label }}</label>
+      {{ form.comment }}
+      {% if form.comment.errors %}<div class="text-danger small">{% for error in form.comment.errors %}{{ error }}{% endfor %}</div>{% endif %}
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="id_attachment">{{ form.attachment.label }}</label>
+      {{ form.attachment }}
+      {% if form.attachment.help_text %}<div class="form-text">{{ form.attachment.help_text }}</div>{% endif %}
+      {% if form.attachment.errors %}<div class="text-danger small">{% for error in form.attachment.errors %}{{ error }}{% endfor %}</div>{% endif %}
+    </div>
+    <button type="submit" class="btn btn-primary">Отправить на проверку</button>
+    <a class="btn btn-outline-secondary ms-2" href="{% url 'dashboard' %}">Отмена</a>
+  </form>
+{% endblock %}

@@ -1,0 +1,48 @@
+# Окружение и секреты
+.env
+.env.local
+.env.*.local
+*.env
+
+# Медиа и загрузки через UI (скриншоты лидов, вложения поддержки и т.д.)
+media/
+
+# Базы данных (SQLite и прочие файловые БД)
+*.sqlite3
+*.db
+db.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Виртуальное окружение
+venv/
+.venv/
+env/
+
+# IDE и ОС
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Собранная статика (если используется collectstatic)
+/staticfiles/
+/static_root/
+
+# Логи и отладка
+*.log
+local_settings.py
+
+# Загрузки пользователей (лиды, вложения) — не коммитить
+leads/

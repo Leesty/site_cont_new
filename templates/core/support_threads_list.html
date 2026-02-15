@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block body_attrs %} data-admin-threads-updated-at="{{ admin_threads_updated_at|default:''|escapejs }}"{% endblock %}
+
+{% block title %}Диалоги поддержки — Партнёрка{% endblock %}
+
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">Диалоги поддержки</h1>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard' %}">← В кабинет</a>
+  </div>
+
+  <p class="text-muted">
+    Список активных и недавних обращений пользователей.
+  </p>
+
+  <div class="card shadow-sm mt-3">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0 support-threads-table">
+          <thead>
+            <tr>
+              <th>Пользователь</th>
+              <th>Сообщений</th>
+              <th>Обновлён</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for thread in threads %}
+              <tr class="{% if thread.is_unread %}support-thread-unread{% endif %}">
+                <td>
+                  {{ thread.user.username }}
+                  {% if thread.is_unread %}
+                    <span class="badge bg-success ms-2">Непрочитано</span>
+                  {% endif %}
+                </td>
+                <td>{{ thread.messages_count }}</td>
+                <td>{{ thread.last_message_at|default:thread.updated_at|date:"d.m.Y H:i" }}</td>
+                <td>
+                  <a href="{% url 'support_thread_detail' thread.pk %}" class="btn btn-sm btn-outline-primary">
+                    Открыть
+                  </a>
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="4" class="text-muted py-4 text-center">Диалогов пока нет.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+

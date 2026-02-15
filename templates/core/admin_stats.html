@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Админская статистика — Партнёрка{% endblock %}
+
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">Админская статистика</h1>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard' %}">← В кабинет</a>
+  </div>
+
+  <h2 class="h5 mt-3">Базы контактов</h2>
+  <div class="card shadow-sm mt-2">
+    <div class="card-body p-0">
+      <table class="table table-sm align-middle mb-0 table-dark-site">
+    <thead>
+      <tr>
+        <th>База</th>
+        <th>Всего контактов</th>
+        <th>Свободно</th>
+        <th>Выдано</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in base_stats %}
+        <tr>
+          <td>{{ item.base.name }}</td>
+          <td>{{ item.total }}</td>
+          <td>{{ item.free }}</td>
+          <td>{{ item.issued }}</td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="4" class="text-muted">Типы баз ещё не созданы.</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+    </div>
+  </div>
+
+  <h2 class="h5 mt-4">Статистика по лидам</h2>
+  <p class="text-muted mb-1">
+    За неделю: <strong>{{ total_leads_week }}</strong> —
+    за месяц: <strong>{{ total_leads_month }}</strong> —
+    за всё время: <strong>{{ total_leads_all }}</strong>
+  </p>
+  <div class="card shadow-sm mt-2">
+    <div class="card-body p-0">
+      <table class="table table-sm align-middle mb-0 table-dark-site">
+    <thead>
+      <tr>
+        <th>Категория</th>
+        <th>За неделю</th>
+        <th>За месяц</th>
+        <th>Всё время</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in lead_type_stats %}
+        <tr>
+          <td>{{ item.name }}</td>
+          <td>{{ item.week }}</td>
+          <td>{{ item.month }}</td>
+          <td>{{ item.all }}</td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="4" class="text-muted">Лидов пока нет.</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+    </div>
+  </div>
+{% endblock %}
+

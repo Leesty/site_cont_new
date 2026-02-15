@@ -1,0 +1,24 @@
+from django import template
+
+register = template.Library()
+
+IMAGE_EXTENSIONS = frozenset(("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic"))
+VIDEO_EXTENSIONS = frozenset(("mp4", "mov", "webm", "m4v", "3gp"))
+
+
+@register.filter
+def support_attachment_is_image(attachment) -> bool:
+    """True, если вложение — изображение (по расширению)."""
+    if not attachment or not getattr(attachment, "name", None):
+        return False
+    ext = (attachment.name or "").rsplit(".", 1)[-1].lower()
+    return ext in IMAGE_EXTENSIONS
+
+
+@register.filter
+def lead_attachment_is_video(attachment) -> bool:
+    """True, если вложение лида — видео (по расширению)."""
+    if not attachment or not getattr(attachment, "name", None):
+        return False
+    ext = (attachment.name or "").rsplit(".", 1)[-1].lower()
+    return ext in VIDEO_EXTENSIONS

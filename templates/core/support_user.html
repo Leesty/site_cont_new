@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% load support_extras %}
+
+{% block title %}Поддержка — Партнёрка{% endblock %}
+
+{% block content %}
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h1 class="h4 mb-0">Поддержка</h1>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard' %}">← В кабинет</a>
+  </div>
+
+  <p class="text-muted">
+    Напишите свой вопрос или опишите проблему. Сообщения увидит менеджер поддержки и ответит вам в этом же окне.
+  </p>
+
+  <div class="card mb-3">
+    <div class="card-body support-chat-body">
+      {% if support_messages %}
+        {% for msg in support_messages %}
+          <div class="mb-2">
+            <div class="small text-muted">
+              {% if msg.is_from_support %}
+                Поддержка • {{ msg.created_at|date:"d.m.Y H:i" }}
+              {% else %}
+                Вы • {{ msg.created_at|date:"d.m.Y H:i" }}
+              {% endif %}
+            </div>
+            <div class="p-2 rounded {% if msg.is_from_support %}support-thread-support{% else %}support-thread-user{% endif %}">
+              {% if msg.text %}{{ msg.text|linebreaksbr }}{% endif %}
+              {% if msg.attachment %}
+                <div class="mt-1">
+                  <a href="{{ msg.attachment.url }}" target="_blank" rel="noopener">
+                    📎 {% if msg.attachment|support_attachment_is_image %}Открыть / скачать фото{% else %}{{ msg.attachment.name }}{% endif %}
+                  </a>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p class="text-muted mb-0">Пока сообщений нет — напишите первое.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" class="mt-2">
+    {% csrf_token %}
+    <div class="mb-3">
+      <label class="form-label" for="id_text">Сообщение</label>
+      <textarea class="form-control" name="text" id="id_text" rows="3" placeholder="Текст сообщения..."></textarea>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="id_attachment">Вложение (скриншот, файл)</label>
+      <input type="file" class="form-control" name="attachment" id="id_attachment" accept="image/*,.pdf">
+    </div>
+    <button type="submit" class="btn btn-primary">Отправить</button>
+  </form>
+{% endblock %}
+

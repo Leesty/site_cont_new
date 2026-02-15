@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% load support_extras %}
+
+{% block title %}Отчёты — @{{ target_user.username }} — Партнёрка{% endblock %}
+
+{% block content %}
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h1 class="h4 mb-0">Отчёты (лиды): @{{ target_user.username }}</h1>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_user_leads_export' target_user.pk 'today' %}">Скачать за сегодня</a>
+      <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_user_leads_export' target_user.pk 'yesterday' %}">Скачать за вчера</a>
+      <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_user_leads_export' target_user.pk 'all' %}">Скачать все (Excel)</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'admin_user_lead_stats' target_user.pk %}">Статистика</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'admin_all_users' %}">← Все пользователи</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard' %}">← В кабинет</a>
+    </div>
+  </div>
+
+  <p class="text-muted small mb-3">
+    Список лидов пользователя. В колонке «Вложение» — просмотр скриншота или видео (запись экрана). Периоды «сегодня» и «вчера» — по границе 20:00 МСК.
+  </p>
+
+  <div class="card shadow-sm">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm mb-0 align-middle table-dark-site">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Создан</th>
+              <th>Тип лида</th>
+              <th>Статус</th>
+              <th>Вложение</th>
+              <th>Контакт</th>
+              <th>Источник</th>
+              <th>Комментарий</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for lead in page_obj %}
+              <tr>
+                <td>{{ lead.id }}</td>
+                <td>{{ lead.created_at|date:"d.m.Y H:i" }}</td>
+                <td>{{ lead.lead_type.name|default:"—" }}</td>
+                <td>
+                  <div class="d-flex flex-column gap-1">
+                    <div class="d-flex flex-wrap align-items-center gap-1">
+                      {% if lead.status == 'approved' %}
+                        <span class="badge bg-success">Одобрен</span>
+                      {% elif lead.status == 'rejected' %}
+                        <span class="badge bg-danger">Отклонён</span>
+                      {% elif lead.status == 'rework' %}
+                        <span class="badge bg-warning text-dark">На доработке</span>
+                      {% else %}
+                        <span class="badge bg-secondary">На проверке</span>
+                      {% endif %}
+                      {% if lead.status == 'pending' or lead.status == 'rework' %}
+                        <form method="post" action="{% url 'admin_lead_approve' target_user.pk lead.id %}" class="d-inline">
+                          {% csrf_token %}
+                          <button type="submit" class="btn btn-success btn-sm">Одобрить</button>
+                        </form>
+                        <a class="btn btn-outline-danger btn-sm" href="{% url 'admin_lead_reject' target_user.pk lead.id %}">Отклонить</a>
+                      {% endif %}
+                    </div>
+                    {% if lead.status == 'pending' or lead.status == 'rework' %}
+                      <div>
+                        <a class="btn btn-warning btn-sm text-dark" href="{% url 'admin_lead_rework' target_user.pk lead.id %}">На доработку</a>
+                      </div>
+                    {% endif %}
+                  </div>
+                </td>
+                <td>
+                  {% if lead.attachment %}
+                    {% if lead.attachment|lead_attachment_is_video %}
+                      <a href="{{ lead.attachment.url }}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">Смотреть видео</a>
+                    {% else %}
+                      <a href="{{ lead.attachment.url }}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">Открыть</a>
+                    {% endif %}
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td>{{ lead.raw_contact|default:"—" }}</td>
+                <td>{{ lead.source|truncatechars:40|default:"—" }}</td>
+                <td>{{ lead.comment|truncatechars:60|default:"—" }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="8" class="text-muted py-4 text-center">Лидов пока нет.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% if page_obj.paginator.num_pages > 1 %}
+      <div class="card-footer py-2">
+        <nav>
+          <ul class="pagination pagination-sm mb-0 justify-content-center">
+            {% if page_obj.has_previous %}
+              <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}">←</a>
+              </li>
+            {% endif %}
+            <li class="page-item disabled">
+              <span class="page-link">Стр. {{ page_obj.number }} из {{ page_obj.paginator.num_pages }}</span>
+            </li>
+            {% if page_obj.has_next %}
+              <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}">→</a>
+              </li>
+            {% endif %}
+          </ul>
+        </nav>
+      </div>
+    {% endif %}
+  </div>
+{% endblock %}

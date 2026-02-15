@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Заявки пользователей — Партнёрка{% endblock %}
+
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">Заявки пользователей</h1>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard' %}">← В кабинет</a>
+  </div>
+
+  <p class="text-muted small mb-3">
+    Здесь отображаются все новые пользователи со статусом «на модерации». Одним кликом можно одобрить доступ
+    к кабинету или сразу заблокировать аккаунт.
+  </p>
+
+  {% if pending_users %}
+    <div class="card shadow-sm">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm mb-0 align-middle table-dark-site">
+            <thead>
+              <tr>
+                <th style="width: 30%;">Логин</th>
+                <th style="width: 30%;">Дата регистрации</th>
+                <th style="width: 20%;">Статус</th>
+                <th style="width: 20%;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for u in pending_users %}
+                <tr>
+                  <td>@{{ u.username }}</td>
+                  <td>{{ u.date_joined|date:"d.m.Y H:i" }}</td>
+                  <td><span class="badge bg-warning text-dark">На модерации</span></td>
+                  <td>
+                    <form method="post" class="d-inline">
+                      {% csrf_token %}
+                      <input type="hidden" name="user_id" value="{{ u.id }}">
+                      <button type="submit" name="action" value="approve" class="btn btn-success btn-sm me-1">
+                        Одобрить
+                      </button>
+                    </form>
+                    <form method="post" class="d-inline">
+                      {% csrf_token %}
+                      <input type="hidden" name="user_id" value="{{ u.id }}">
+                      <button type="submit" name="action" value="ban" class="btn btn-outline-danger btn-sm">
+                        Бан
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <p class="text-muted">Новых заявок пока нет.</p>
+  {% endif %}
+{% endblock %}
+

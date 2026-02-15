@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% load support_extras %}
+
+{% block body_attrs %} data-admin-threads-updated-at="{{ admin_threads_updated_at|default:''|escapejs }}"{% endblock %}
+
+{% block title %}Диалог с {{ thread.user.username }} — Партнёрка{% endblock %}
+
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">Диалог с {{ thread.user.username }}</h1>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard' %}">← В кабинет</a>
+      <a class="btn btn-outline-primary btn-sm" href="{% url 'support_threads_list' %}">← К диалогам</a>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body support-chat-body">
+      {% for msg in support_messages %}
+        <div class="mb-2 support-message-row">
+          <div class="d-flex justify-content-between align-items-start gap-2 small text-muted">
+            <span>
+              {% if msg.is_from_support %}
+                Поддержка ({{ msg.sender.username }}) • {{ msg.created_at|date:"d.m.Y H:i" }}
+              {% else %}
+                Пользователь • {{ msg.created_at|date:"d.m.Y H:i" }}
+              {% endif %}
+            </span>
+            <form method="post" action="{% url 'support_message_delete' msg.pk %}" class="d-inline" onsubmit="return confirm('Удалить это сообщение?');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-link btn-sm p-0 text-danger" title="Удалить сообщение">✕</button>
+            </form>
+          </div>
+          <div class="p-2 rounded {% if msg.is_from_support %}support-thread-support{% else %}support-thread-user{% endif %}">
+            {% if msg.text %}{{ msg.text|linebreaksbr }}{% endif %}
+            {% if msg.attachment %}
+              <div class="mt-1">
+                <a href="{{ msg.attachment.url }}" target="_blank" rel="noopener">
+                  📎 {% if msg.attachment|support_attachment_is_image %}Открыть / скачать фото{% else %}{{ msg.attachment.name }}{% endif %}
+                </a>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      {% empty %}
+        <p class="text-muted mb-0">Сообщений пока нет.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <form method="post" class="mt-2">
+    {% csrf_token %}
+    <div class="mb-3">
+      <label class="form-label" for="id_text">Ответ</label>
+      <textarea class="form-control" name="text" id="id_text" rows="3" required></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">Отправить ответ</button>
+  </form>
+{% endblock %}
+

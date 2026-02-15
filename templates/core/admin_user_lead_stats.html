@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Статистика лидов — {{ target_user.username }} — Партнёрка{% endblock %}
+
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">Статистика лидов: @{{ target_user.username }}</h1>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_all_users' %}">← Все пользователи</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard' %}">← В кабинет</a>
+    </div>
+  </div>
+
+  <p class="text-muted small">
+    Сводка по лидам с учётом логики «дня» (граница 20:00 МСК).
+  </p>
+
+  <div class="mb-3">
+    <strong class="text-muted small">Скачать лиды (Excel):</strong>
+    <span class="ms-2">
+      <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_user_leads_export' target_user.pk 'today' %}">За сегодня</a>
+      <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_user_leads_export' target_user.pk 'yesterday' %}">За вчера</a>
+      <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_user_leads_export' target_user.pk 'all' %}">Все лиды</a>
+    </span>
+  </div>
+  <div class="mb-3">
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'admin_user_leads_list' target_user.pk %}">Отчёты и проверка скриншотов</a>
+    <span class="text-muted small ms-2">— список лидов с ссылками на вложения</span>
+  </div>
+
+  <div class="row g-3 mt-2">
+    <div class="col-md-4">
+      <div class="card shadow-sm">
+        <div class="card-body text-center">
+          <div class="h1 mb-1">{{ today_count }}</div>
+          <div class="text-muted small">За сегодня</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card shadow-sm">
+        <div class="card-body text-center">
+          <div class="h1 mb-1">{{ yesterday_count }}</div>
+          <div class="text-muted small">За вчера</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card shadow-sm">
+        <div class="card-body text-center">
+          <div class="h1 mb-1">{{ total_count }}</div>
+          <div class="text-muted small">За всё время</div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

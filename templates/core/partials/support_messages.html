@@ -1,0 +1,26 @@
+{% load support_extras %}
+<div id="support-messages" class="support-messages">
+  {% for msg in support_messages %}
+    <div class="support-msg mb-2">
+      <div class="small text-muted">
+        {% if msg.is_from_support %}
+          Поддержка • {{ msg.created_at|date:"d.m.Y H:i" }}
+        {% else %}
+          Вы • {{ msg.created_at|date:"d.m.Y H:i" }}
+        {% endif %}
+      </div>
+      <div class="p-2 rounded {% if msg.is_from_support %}support-thread-support{% else %}support-thread-user{% endif %}">
+        {% if msg.text %}{{ msg.text|linebreaksbr }}{% endif %}
+        {% if msg.attachment %}
+          <div class="mt-1">
+            <a href="{{ msg.attachment.url }}" target="_blank" rel="noopener">
+              📎 {% if msg.attachment|support_attachment_is_image %}Открыть / скачать фото{% else %}{{ msg.attachment.name }}{% endif %}
+            </a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  {% empty %}
+    <p class="text-muted mb-0 small">Пока сообщений нет — напишите первое.</p>
+  {% endfor %}
+</div>

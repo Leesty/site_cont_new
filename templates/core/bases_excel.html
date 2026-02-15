@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Базы (Excel) — Партнёрка{% endblock %}
+
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">Базы контактов (Excel)</h1>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard' %}">← В кабинет</a>
+  </div>
+
+  <div class="row">
+    <div class="col-lg-6 mb-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <h2 class="h6 mb-2">Загрузить ВСЕ категории из одного файла</h2>
+          <p class="text-muted small mb-3">
+            Как в боте: файл <strong>.xlsx</strong> с листами по типам базы. Названия листов: {{ sheet_names_hint }}.
+            В первом столбце — контакты; колонки справа (ID, User, Date) — «отработанные», такие строки не загружаются. Загружаются только свободные контакты. Дубликаты не добавляются.
+          </p>
+          <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="mb-3">
+              {{ form_all.file.label_tag }}
+              {{ form_all.file }}
+              {% if form_all.file.errors %}
+                <div class="text-danger small">{% for error in form_all.file.errors %}{{ error }}{% endfor %}</div>
+              {% endif %}
+            </div>
+            <button type="submit" name="upload_all" class="btn btn-primary">Загрузить все листы</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6 mb-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <h2 class="h6 mb-2">Загрузить базу по категории</h2>
+          <p class="text-muted small mb-3">
+            Выберите категорию и загрузите один файл <strong>.xlsx</strong>. Данные берутся из первого столбца первого листа (первая строка — заголовок). Дубликаты пропускаются.
+          </p>
+          <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="mb-3">
+              {{ form_category.base_type.label_tag }}
+              {{ form_category.base_type }}
+              {% if form_category.base_type.errors %}
+                <div class="text-danger small">{% for error in form_category.base_type.errors %}{{ error }}{% endfor %}</div>
+              {% endif %}
+            </div>
+            <div class="mb-3">
+              {{ form_category.file.label_tag }}
+              {{ form_category.file }}
+              {% if form_category.file.errors %}
+                <div class="text-danger small">{% for error in form_category.file.errors %}{{ error }}{% endfor %}</div>
+              {% endif %}
+            </div>
+            <button type="submit" name="upload_category" class="btn btn-primary">Загрузить в выбранную базу</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body">
+          <h2 class="h6 mb-2">Выгрузить базы</h2>
+          <p class="text-muted small mb-2">
+            Скачать все базы одним файлом или выберите категорию:
+          </p>
+          <div class="d-flex flex-wrap gap-2 mb-2">
+            <a class="btn btn-outline-primary" href="{% url 'download_bases_excel' %}">Скачать все (bases.xlsx)</a>
+            {% for base in base_types %}
+              <a class="btn btn-outline-primary btn-sm" href="{% url 'download_bases_excel_category' base.pk %}">Скачать {{ base.name }}</a>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

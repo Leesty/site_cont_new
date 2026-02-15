@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}Админ-панель — Партнёрка{% endblock %}
+
+{% block content %}
+  <div class="mb-3">
+    <h1 class="h4 mb-1">Админ-панель</h1>
+    <p class="text-muted small mb-0">
+      Добро пожаловать, {{ user.username }}. Управление заявками, диалогами, базами и лидами.
+    </p>
+  </div>
+
+  <div class="row row-cols-1 row-cols-md-2 g-3 mt-2 dashboard-grid">
+    <div class="col">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="card-icon contacts mb-2">👥</div>
+          <h2 class="h5 mb-2">Все пользователи</h2>
+          <p class="text-muted small mb-3">
+            Список пользователей: написать, статистика лидов, выдача лимитов.
+          </p>
+          <div class="d-flex align-items-center gap-2">
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_all_users' %}">Перейти</a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="card-icon contacts mb-2">📋</div>
+          <h2 class="h5 mb-2">Заявки пользователей</h2>
+          <p class="text-muted small mb-3">
+            Одобрение или отклонение новых заявок на регистрацию.
+          </p>
+          <div class="d-flex align-items-center gap-2">
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_users_pending' %}">Перейти</a>
+            <span id="admin-pending-requests" class="btn btn-danger btn-sm" title="Новых заявок" style="{% if not pending_requests_count %}display:none;{% endif %}">{{ pending_requests_count|default:0 }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="card-icon support mb-2">💬</div>
+          <h2 class="h5 mb-2">Диалоги поддержки</h2>
+          <p class="text-muted small mb-3">
+            Список обращений и чаты с пользователями.
+          </p>
+          <div class="d-flex align-items-center gap-2">
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'support_threads_list' %}">Перейти</a>
+            <span id="admin-unread-threads" class="btn btn-danger btn-sm" title="Непрочитанных диалогов" style="{% if not unread_threads_count %}display:none;{% endif %}">{{ unread_threads_count|default:0 }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="card-icon contacts mb-2">📥</div>
+          <h2 class="h5 mb-2">Выдача контактов по запросу</h2>
+          <p class="text-muted small mb-3">
+            Пользователи, которые просят дополнительный лимит контактов. Выдать лимиты и отметить заявки.
+          </p>
+          <div class="d-flex align-items-center gap-2">
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_contact_requests' %}">Перейти</a>
+            <span id="admin-contact-requests" class="btn btn-danger btn-sm" title="Заявок на контакты" style="{% if not contact_requests_pending_count %}display:none;{% endif %}">{{ contact_requests_pending_count|default:0 }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="card-icon contacts mb-2">💰</div>
+          <h2 class="h5 mb-2">Заявки на вывод</h2>
+          <p class="text-muted small mb-3">
+            Пользователи запросили вывод средств (баланс в рублях). Одобрить или отклонить.
+          </p>
+          <div class="d-flex align-items-center gap-2">
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_withdrawal_requests' %}">Перейти</a>
+            <span id="admin-withdrawal-requests" class="btn btn-danger btn-sm" title="Заявок на вывод" style="{% if not withdrawal_requests_pending_count %}display:none;{% endif %}">{{ withdrawal_requests_pending_count|default:0 }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="card-icon stats mb-2">📊</div>
+          <h2 class="h5 mb-2">Статистика</h2>
+          <p class="text-muted small mb-3">
+            Сводка по базам контактов и лидам.
+          </p>
+          <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_stats' %}">Перейти</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="card-icon report mb-2">📦</div>
+          <h2 class="h5 mb-2">Базы (Excel)</h2>
+          <p class="text-muted small mb-3">
+            Загрузка и выгрузка баз контактов в Excel.
+          </p>
+          <a class="btn btn-outline-primary btn-sm" href="{% url 'bases_excel' %}">Перейти</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="card-icon stats mb-2">📋</div>
+          <h2 class="h5 mb-2">Выгрузить лиды (Excel)</h2>
+          <p class="text-muted small mb-3">
+            Скачать все лиды в одном Excel-файле.
+          </p>
+          <a class="btn btn-outline-primary btn-sm" href="{% url 'download_leads_excel' %}">Скачать</a>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

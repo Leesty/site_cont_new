@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Загрузка баз (Excel) — Партнёрка{% endblock %}
+
+{% block content %}
+  <h1 class="h4 mb-3">Загрузка баз контактов из Excel</h1>
+
+  <p class="text-muted">
+    Ожидается файл формата <strong>.xlsx</strong> с отдельными листами по каждому типу базы.
+    Названия листов должны соответствовать тем, что использовались в боте
+    (например, «Telegram», «WhatsApp», «Тг», «Инст» и т.д.).
+    В первом столбце каждого листа — контакты.
+  </p>
+
+  <form method="post" enctype="multipart/form-data" class="mt-3">
+    {% csrf_token %}
+    <div class="mb-3">
+      {{ form.file.label_tag }}
+      {{ form.file }}
+      {% if form.file.errors %}
+        <div class="text-danger small">
+          {% for error in form.file.errors %}{{ error }}{% endfor %}
+        </div>
+      {% endif %}
+    </div>
+    <button type="submit" class="btn btn-primary">Загрузить</button>
+  </form>
+{% endblock %}
+

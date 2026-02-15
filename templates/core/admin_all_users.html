@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Все пользователи — Партнёрка{% endblock %}
+
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">Все пользователи</h1>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard' %}">← В кабинет</a>
+  </div>
+
+  <p class="text-muted small mb-2">
+    Всего пользователей: <strong>{{ total_users_count }}</strong>.
+    Активных за сегодня: <strong>{{ active_today_count }}</strong>.
+    Активных за вчера: <strong>{{ active_yesterday_count }}</strong>.
+  </p>
+
+  <ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+      <a class="nav-link {% if show == 'all' %}active{% endif %}" href="?show=all">Все пользователи ({{ total_users_count }})</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if show == 'today' %}active{% endif %}" href="?show=today">Активные за сегодня ({{ active_today_count }})</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if show == 'yesterday' %}active{% endif %}" href="?show=yesterday">Активные за вчера ({{ active_yesterday_count }})</a>
+    </li>
+  </ul>
+
+  <p class="text-muted small mb-3">
+    {% if show == 'today' %}Пользователи, сдававшие отчёт по лидам в текущем отчётном дне (граница 20:00 МСК).{% endif %}
+    {% if show == 'yesterday' %}Пользователи, сдававшие отчёт по лидам в предыдущем отчётном дне (граница 20:00 МСК).{% endif %}
+    {% if show == 'all' %}Список пользователей сайта. Написать — открыть чат с поддержкой, Статистика — лиды пользователя, Отчёты — лиды пользователя.{% endif %}
+  </p>
+
+  <div class="card shadow-sm">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm mb-0 align-middle table-dark-site">
+          <thead>
+            <tr>
+              <th>Пользователь</th>
+              <th>Статус</th>
+              <th>Баланс</th>
+              <th>Регистрация</th>
+              <th style="width: 1%; white-space: nowrap;">Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in users_list %}
+              <tr>
+                <td>@{{ u.username }}</td>
+                <td>
+                  {% if u.status == 'approved' %}
+                    <span class="badge bg-success">Одобрен</span>
+                  {% elif u.status == 'pending' %}
+                    <span class="badge bg-warning text-dark">На модерации</span>
+                  {% else %}
+                    <span class="badge bg-secondary">Заблокирован</span>
+                  {% endif %}
+                </td>
+                <td>{{ u.balance|default:0 }}</td>
+                <td>{{ u.date_joined|date:"d.m.Y H:i" }}</td>
+                <td>
+                  <div class="d-flex flex-wrap gap-1">
+                    <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_user_balance' u.pk %}" title="Баланс">Баланс</a>
+                    <a class="btn btn-outline-primary btn-sm" href="{% url 'support_thread_by_user' u.pk %}" title="Написать">Написать</a>
+                    <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_user_lead_stats' u.pk %}" title="Статистика лидов">Статистика</a>
+                    <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_user_leads_list' u.pk %}" title="Отчёты (лиды)">Отчёты</a>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="5" class="text-muted py-4 text-center">Пользователей пока нет.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+{% endblock %}

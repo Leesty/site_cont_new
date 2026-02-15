@@ -1,0 +1,959 @@
+from datetime import date, datetime, time, timedelta, timezone as dt_utc
+from io import BytesIO
+from zoneinfo import ZoneInfo
+
+from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
+from django.db import transaction
+from django.db.models import Case, Count, F, IntegerField, Max, Q, Value, When
+from django.http import HttpRequest, HttpResponse, HttpResponseForbidden
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from django.views.decorators.http import require_http_methods
+from openpyxl import Workbook, load_workbook
+
+from .forms import BaseCategoryUploadForm, BaseExcelUploadForm, LeadRejectForm, LeadReworkForm, LeadsExcelUploadForm
+from .models import BaseType, Contact, ContactRequest, Lead, LeadType, SupportMessage, SupportThread, User, UserBaseLimit, WithdrawalRequest
+
+
+def _require_support(request: HttpRequest) -> bool:
+    user = request.user
+    if not user.is_authenticated:
+        return False
+    # Доступ для ролей поддержки/админов и для staff/superuser
+    if getattr(user, "is_support", False) or user.is_staff or user.is_superuser:
+        return True
+    return False
+
+
+@login_required
+def admin_users_pending(request: HttpRequest) -> HttpResponse:
+    """Список новых пользователей со статусом pending с кнопками одобрения/бана."""
+
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+
+    if request.method == "POST":
+        user_id = request.POST.get("user_id")
+        action = request.POST.get("action")
+        if user_id and action in {"approve", "ban"}:
+            user = get_object_or_404(User, pk=user_id)
+            if action == "approve":
+                user.status = User.Status.APPROVED
+                messages.success(request, f"Пользователь @{user.username} одобрен.")
+            elif action == "ban":
+                user.status = User.Status.BANNED
+                messages.warning(request, f"Пользователь @{user.username} заблокирован.")
+            user.save(update_fields=["status"])
+        return redirect("admin_users_pending")
+
+    pending_users = User.objects.filter(status=User.Status.PENDING).order_by("-date_joined")
+
+    return render(
+        request,
+        "core/admin_users_pending.html",
+        {
+            "pending_users": pending_users,
+        },
+    )
+
+
+@login_required
+def support_threads_list(request: HttpRequest) -> HttpResponse:
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+
+    threads = (
+        SupportThread.objects.select_related("user")
+        .annotate(
+            last_message_at=Max("messages__created_at"),
+            messages_count=Count("messages"),
+            is_unread=Case(
+                When(Q(last_read_at__isnull=True), then=Value(1)),
+                When(updated_at__gt=F("last_read_at"), then=Value(1)),
+                default=Value(0),
+                output_field=IntegerField(),
+            ),
+        )
+        .order_by("-is_unread", "-updated_at")
+    )
+    threads_agg = SupportThread.objects.aggregate(m=Max("updated_at"))
+    admin_threads_updated_at = threads_agg["m"].isoformat() if threads_agg.get("m") else ""
+
+    return render(
+        request,
+        "core/support_threads_list.html",
+        {
+            "threads": threads,
+            "admin_threads_updated_at": admin_threads_updated_at,
+        },
+    )
+
+
+@login_required
+def support_thread_detail(request: HttpRequest, pk: int) -> HttpResponse:
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+
+    thread = get_object_or_404(SupportThread.objects.select_related("user"), pk=pk)
+
+    # Открытие диалога = «прочитано»
+    thread.last_read_at = timezone.now()
+    thread.save(update_fields=["last_read_at"])
+
+    if request.method == "POST":
+        text = (request.POST.get("text") or "").strip()
+        if text:
+            SupportMessage.objects.create(
+                thread=thread,
+                sender=request.user,
+                is_from_support=True,
+                text=text,
+            )
+            thread.updated_at = timezone.now()
+            thread.save(update_fields=["updated_at"])
+            messages.success(request, "Ответ отправлен пользователю.")
+            return redirect("support_thread_detail", pk=thread.pk)
+
+    messages_qs = thread.messages.select_related("sender").order_by("created_at")
+    threads_agg = SupportThread.objects.aggregate(m=Max("updated_at"))
+    admin_threads_updated_at = threads_agg["m"].isoformat() if threads_agg.get("m") else ""
+
+    return render(
+        request,
+        "core/support_thread_detail.html",
+        {
+            "thread": thread,
+            "support_messages": messages_qs,
+            "admin_threads_updated_at": admin_threads_updated_at,
+        },
+    )
+
+
+@login_required
+def support_message_delete(request: HttpRequest, pk: int) -> HttpResponse:
+    """Удаление сообщения в диалоге (только для сотрудников поддержки)."""
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+    msg = get_object_or_404(SupportMessage.objects.select_related("thread"), pk=pk)
+    thread_pk = msg.thread_id
+    msg.delete()
+    messages.success(request, "Сообщение удалено.")
+    return redirect("support_thread_detail", pk=thread_pk)
+
+
+@login_required
+def support_thread_delete(request: HttpRequest, pk: int) -> HttpResponse:
+    """Удаление чатов отключено — сохранение истории обращений."""
+    return HttpResponseForbidden("Удаление чатов отключено.")
+
+
+@login_required
+def support_thread_by_user(request: HttpRequest, user_id: int) -> HttpResponse:
+    """Открыть диалог поддержки с пользователем (редирект на страницу диалога)."""
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+    target_user = get_object_or_404(User, pk=user_id)
+    thread, _ = SupportThread.objects.get_or_create(user=target_user, is_closed=False)
+    return redirect("support_thread_detail", pk=thread.pk)
+
+
+def _day_bounds_lead_stats():
+    """Границы «дня» для лидов (20:00 МСК), как в боте."""
+    tz = ZoneInfo("Europe/Moscow")
+    now = datetime.now(tz)
+    from_day = now.date()
+    if now.hour >= 20:
+        from_day = now.date() + timedelta(days=1)
+
+    def bounds(day: date):
+        start = datetime.combine(day - timedelta(days=1), time(hour=20), tzinfo=tz)
+        end = datetime.combine(day, time(hour=20), tzinfo=tz)
+        return start.astimezone(dt_utc.utc), end.astimezone(dt_utc.utc)
+
+    today_start, today_end = bounds(from_day)
+    yesterday_start, yesterday_end = bounds(from_day - timedelta(days=1))
+    return today_start, today_end, yesterday_start, yesterday_end
+
+
+@login_required
+def admin_user_lead_stats(request: HttpRequest, user_id: int) -> HttpResponse:
+    """Статистика лидов по выбранному пользователю (для админа)."""
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+    target_user = get_object_or_404(User, pk=user_id)
+    today_start, today_end, yesterday_start, yesterday_end = _day_bounds_lead_stats()
+    today_count = Lead.objects.filter(
+        user=target_user, created_at__gte=today_start, created_at__lt=today_end
+    ).count()
+    yesterday_count = Lead.objects.filter(
+        user=target_user, created_at__gte=yesterday_start, created_at__lt=yesterday_end
+    ).count()
+    total_count = Lead.objects.filter(user=target_user).count()
+    return render(
+        request,
+        "core/admin_user_lead_stats.html",
+        {
+            "target_user": target_user,
+            "today_count": today_count,
+            "yesterday_count": yesterday_count,
+            "total_count": total_count,
+        },
+    )
+
+
+@login_required
+def admin_user_leads_list(request: HttpRequest, user_id: int) -> HttpResponse:
+    """Список лидов (отчётов) пользователя с возможностью скачать за сегодня/вчера."""
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+    target_user = get_object_or_404(User, pk=user_id)
+    leads_qs = (
+        Lead.objects.filter(user=target_user)
+        .select_related("lead_type", "base_type")
+        .order_by("-created_at")
+    )
+    paginator = Paginator(leads_qs, 50)
+    page_number = request.GET.get("page", 1)
+    page_obj = paginator.get_page(page_number)
+    return render(
+        request,
+        "core/admin_user_leads_list.html",
+        {
+            "target_user": target_user,
+            "page_obj": page_obj,
+        },
+    )
+
+
+LEAD_APPROVE_REWARD = getattr(settings, "LEAD_APPROVE_REWARD", 40)
+
+
+@login_required
+@require_http_methods(["POST"])
+def admin_lead_approve(request: HttpRequest, user_id: int, lead_id: int) -> HttpResponse:
+    """Одобрить лид: начислить пользователю LEAD_APPROVE_REWARD руб., статус — одобрен."""
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+    lead = get_object_or_404(Lead, pk=lead_id, user_id=user_id)
+    if lead.status == Lead.Status.APPROVED:
+        messages.info(request, "Лид уже одобрен.")
+        return redirect("admin_user_leads_list", user_id=user_id)
+    if lead.status not in (Lead.Status.PENDING, Lead.Status.REWORK):
+        messages.warning(request, "Можно одобрять только лиды на проверке или на доработке.")
+        return redirect("admin_user_leads_list", user_id=user_id)
+    with transaction.atomic():
+        lead.status = Lead.Status.APPROVED
+        lead.rejection_reason = ""
+        lead.rework_comment = ""
+        lead.reviewed_at = timezone.now()
+        lead.reviewed_by = request.user
+        lead.save(update_fields=["status", "rejection_reason", "rework_comment", "reviewed_at", "reviewed_by"])
+        lead.user.balance = (getattr(lead.user, "balance", 0) or 0) + LEAD_APPROVE_REWARD
+        lead.user.save(update_fields=["balance"])
+    messages.success(request, f"Лид #{lead_id} одобрен. Пользователю начислено {LEAD_APPROVE_REWARD} руб.")
+    return redirect("admin_user_leads_list", user_id=user_id)
+
+
+@login_required
+def admin_lead_reject(request: HttpRequest, user_id: int, lead_id: int) -> HttpResponse:
+    """Отклонить лид — форма с причиной отклонения."""
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+    lead = get_object_or_404(Lead, pk=lead_id, user_id=user_id)
+    if request.method == "POST":
+        form = LeadRejectForm(request.POST)
+        if form.is_valid():
+            lead.status = Lead.Status.REJECTED
+            lead.rejection_reason = form.cleaned_data["rejection_reason"].strip()
+            lead.rework_comment = ""
+            lead.reviewed_at = timezone.now()
+            lead.reviewed_by = request.user
+            lead.save(update_fields=["status", "rejection_reason", "rework_comment", "reviewed_at", "reviewed_by"])
+            messages.success(request, f"Лид #{lead_id} отклонён.")
+            return redirect("admin_user_leads_list", user_id=user_id)
+    else:
+        form = LeadRejectForm()
+    return render(
+        request,
+        "core/admin_lead_reject.html",
+        {"lead": lead, "target_user": lead.user, "form": form},
+    )
+
+
+@login_required
+def admin_lead_rework(request: HttpRequest, user_id: int, lead_id: int) -> HttpResponse:
+    """Отправить лид на доработку — форма с указанием, что доработать."""
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+    lead = get_object_or_404(Lead, pk=lead_id, user_id=user_id)
+    if request.method == "POST":
+        form = LeadReworkForm(request.POST)
+        if form.is_valid():
+            lead.status = Lead.Status.REWORK
+            lead.rework_comment = form.cleaned_data["rework_comment"].strip()
+            lead.rejection_reason = ""
+            lead.reviewed_at = timezone.now()
+            lead.reviewed_by = request.user
+            lead.save(update_fields=["status", "rework_comment", "rejection_reason", "reviewed_at", "reviewed_by"])
+            messages.success(request, f"Лид #{lead_id} отправлен на доработку.")
+            return redirect("admin_user_leads_list", user_id=user_id)
+    else:
+        form = LeadReworkForm()
+    return render(
+        request,
+        "core/admin_lead_rework.html",
+        {"lead": lead, "target_user": lead.user, "form": form},
+    )
+
+
+@login_required
+def admin_user_leads_export(request: HttpRequest, user_id: int, period: str) -> HttpResponse:
+    """Выгрузка лидов пользователя за сегодня, вчера или все (Excel). В колонке «Скриншот» — ссылка на файл."""
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+    if period not in ("today", "yesterday", "all"):
+        return HttpResponseForbidden("Недопустимый период.")
+    target_user = get_object_or_404(User, pk=user_id)
+    leads_qs = Lead.objects.filter(user=target_user).select_related("lead_type", "base_type").order_by("-created_at")
+    if period in ("today", "yesterday"):
+        today_start, today_end, yesterday_start, yesterday_end = _day_bounds_lead_stats()
+        if period == "today":
+            start, end = today_start, today_end
+        else:
+            start, end = yesterday_start, yesterday_end
+        leads_qs = leads_qs.filter(created_at__gte=start, created_at__lt=end)
+    leads = list(leads_qs)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Лиды"
+    ws.append(
+        [
+            "ID",
+            "Пользователь",
+            "Тип лида",
+            "Тип базы",
+            "Контакт (raw)",
+            "Источник",
+            "Комментарий",
+            "Создан",
+            "Скриншот (ссылка)",
+        ]
+    )
+    for lead in leads:
+        screenshot_url = ""
+        if lead.attachment:
+            screenshot_url = request.build_absolute_uri(lead.attachment.url)
+        ws.append(
+            [
+                lead.id,
+                lead.user.username,
+                lead.lead_type.name if lead.lead_type else "",
+                lead.base_type.name if lead.base_type else "",
+                lead.raw_contact,
+                lead.source,
+                lead.comment,
+                lead.created_at.isoformat(),
+                screenshot_url,
+            ]
+        )
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    filename = f"leads_{target_user.username}_{period}.xlsx"
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required
+def admin_user_limits(request: HttpRequest, user_id: int) -> HttpResponse:
+    """Редирект: окошко выдачи лимитов убрано, используйте «Выдача контактов по запросу»."""
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+    return redirect("admin_all_users")
+
+
+@login_required
+def admin_user_balance(request: HttpRequest, user_id: int) -> HttpResponse:
+    """Начисление или списание рублей пользователю (баланс)."""
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+    target_user = get_object_or_404(User, pk=user_id)
+    if request.method == "POST":
+        try:
+            amount = int(request.POST.get("amount") or 0)
+            action = request.POST.get("action")
+        except (TypeError, ValueError):
+            amount = 0
+            action = None
+        if amount > 0 and action in ("add", "subtract"):
+            current = target_user.balance or 0
+            if action == "add":
+                target_user.balance = current + amount
+            else:
+                target_user.balance = max(0, current - amount)
+            target_user.save(update_fields=["balance"])
+            msg = f"Начислено {amount} руб." if action == "add" else f"Списано {amount} руб."
+            messages.success(request, f"Баланс @{target_user.username}: {msg}. Текущий баланс: {target_user.balance} руб.")
+            return redirect("admin_all_users")
+        messages.warning(request, "Укажите положительное число и действие (начислить / списать).")
+    return render(
+        request,
+        "core/admin_user_balance.html",
+        {"target_user": target_user},
+    )
+
+
+@login_required
+def admin_all_users(request: HttpRequest) -> HttpResponse:
+    """Список всех пользователей сайта с вкладками: все, активные за сегодня, активные за вчера."""
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+    show = request.GET.get("show", "all")
+    today_start, today_end, yesterday_start, yesterday_end = _day_bounds_lead_stats()
+    total_users_count = User.objects.count()
+    active_today_count = User.objects.filter(
+        leads__created_at__gte=today_start, leads__created_at__lt=today_end
+    ).distinct().count()
+    active_yesterday_count = User.objects.filter(
+        leads__created_at__gte=yesterday_start,
+        leads__created_at__lt=yesterday_end,
+    ).distinct().count()
+    if show == "today":
+        users_list = (
+            User.objects.filter(
+                leads__created_at__gte=today_start, leads__created_at__lt=today_end
+            )
+            .distinct()
+            .order_by("-date_joined")
+        )
+    elif show == "yesterday":
+        users_list = (
+            User.objects.filter(
+                leads__created_at__gte=yesterday_start,
+                leads__created_at__lt=yesterday_end,
+            )
+            .distinct()
+            .order_by("-date_joined")
+        )
+    else:
+        users_list = User.objects.all().order_by("-date_joined")
+    return render(
+        request,
+        "core/admin_all_users.html",
+        {
+            "users_list": users_list,
+            "show": show,
+            "total_users_count": total_users_count,
+            "active_today_count": active_today_count,
+            "active_yesterday_count": active_yesterday_count,
+        },
+    )
+
+
+@login_required
+def admin_stats(request: HttpRequest) -> HttpResponse:
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+
+    # Статистика по базам
+    base_stats = []
+    for base in BaseType.objects.all().order_by("order"):
+        total = Contact.objects.filter(base_type=base).count()
+        free = Contact.objects.filter(base_type=base, assigned_to__isnull=True, is_active=True).count()
+        issued = total - free
+        base_stats.append(
+            {
+                "base": base,
+                "total": total,
+                "free": free,
+                "issued": issued,
+            }
+        )
+
+    # Статистика по лидам: за неделю, месяц, всё время
+    now = timezone.now()
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+
+    total_leads_week = Lead.objects.filter(created_at__gte=week_ago).count()
+    total_leads_month = Lead.objects.filter(created_at__gte=month_ago).count()
+    total_leads_all = Lead.objects.count()
+
+    q_week = Lead.objects.filter(created_at__gte=week_ago).values("lead_type__name").annotate(c=Count("id"))
+    q_month = Lead.objects.filter(created_at__gte=month_ago).values("lead_type__name").annotate(c=Count("id"))
+    q_all = Lead.objects.values("lead_type__name").annotate(c=Count("id"))
+
+    leads_week = {x["lead_type__name"] or "Без категории": x["c"] for x in q_week}
+    leads_month = {x["lead_type__name"] or "Без категории": x["c"] for x in q_month}
+    leads_all = {x["lead_type__name"] or "Без категории": x["c"] for x in q_all}
+
+    type_names = list(LeadType.objects.values_list("name", flat=True).order_by("name"))
+    lead_type_stats = [
+        {
+            "name": n,
+            "week": leads_week.get(n, 0),
+            "month": leads_month.get(n, 0),
+            "all": leads_all.get(n, 0),
+        }
+        for n in type_names
+    ]
+    # Категории, которые есть в лидах, но нет в LeadType (на всякий случай)
+    for name in set(leads_week.keys()) | set(leads_month.keys()) | set(leads_all.keys()):
+        if name not in type_names:
+            lead_type_stats.append({
+                "name": name,
+                "week": leads_week.get(name, 0),
+                "month": leads_month.get(name, 0),
+                "all": leads_all.get(name, 0),
+            })
+
+    return render(
+        request,
+        "core/admin_stats.html",
+        {
+            "base_stats": base_stats,
+            "lead_type_stats": lead_type_stats,
+            "total_leads_week": total_leads_week,
+            "total_leads_month": total_leads_month,
+            "total_leads_all": total_leads_all,
+        },
+    )
+
+
+def _allocate_contacts_to_user(target_user, base_type, count: int) -> int:
+    """Выдаёт пользователю до count контактов из базы. Возвращает количество выданных."""
+    from django.db import transaction
+
+    with transaction.atomic():
+        free_qs = (
+            Contact.objects.select_for_update()
+            .filter(base_type=base_type, assigned_to__isnull=True, is_active=True)
+            .order_by("id")[:count]
+        )
+        contacts_to_give = list(free_qs)
+        if not contacts_to_give:
+            return 0
+        now = timezone.now()
+        for c in contacts_to_give:
+            c.assigned_to = target_user
+            c.assigned_at = now
+            c.save(update_fields=["assigned_to", "assigned_at", "updated_at"])
+        return len(contacts_to_give)
+
+
+@login_required
+def admin_contact_requests(request: HttpRequest) -> HttpResponse:
+    """Список заявок на контакты. «Выдать контакты» — сбрасывает лимит (добавляет доп. лимит), пользователь сам нажимает «Получить контакты»."""
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+    if request.method == "POST" and request.POST.get("action") == "refresh":
+        return redirect("admin_contact_requests")
+    if request.method == "POST":
+        req_id = request.POST.get("request_id")
+        if req_id:
+            req = get_object_or_404(ContactRequest, pk=req_id, status="pending")
+            target_user = req.user
+            bases_to_give = [req.base_type] if req.base_type else list(BaseType.objects.all().order_by("order"))
+            for base in bases_to_give:
+                obj, _ = UserBaseLimit.objects.get_or_create(
+                    user=target_user, base_type=base, defaults={"extra_daily_limit": 0}
+                )
+                obj.extra_daily_limit += base.default_daily_limit
+                obj.save(update_fields=["extra_daily_limit"])
+            req.status = "resolved"
+            req.resolved_at = timezone.now()
+            req.resolved_by = request.user
+            req.save(update_fields=["status", "resolved_at", "resolved_by", "updated_at"])
+            messages.success(
+                request,
+                f"@{target_user.username}: добавлен доп. лимит. Пользователь может нажать «Получить контакты» на странице контактов.",
+            )
+            return redirect("admin_contact_requests")
+    pending = ContactRequest.objects.filter(status="pending").select_related("user", "base_type").order_by("-created_at")
+    return render(
+        request,
+        "core/admin_contact_requests.html",
+        {"pending_requests": pending},
+    )
+
+
+@login_required
+def admin_withdrawal_requests(request: HttpRequest) -> HttpResponse:
+    """Список заявок на вывод. Одобрить — подтвердить вывод (баланс уже обнулён). Отклонить — вернуть сумму на баланс."""
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+    if request.method == "POST":
+        req_id = request.POST.get("request_id")
+        action = request.POST.get("action")
+        if req_id and action in ("approve", "reject"):
+            wreq = get_object_or_404(WithdrawalRequest, pk=req_id, status="pending")
+            now = timezone.now()
+            if action == "approve":
+                wreq.status = "approved"
+                messages.success(
+                    request,
+                    f"Вывод @{wreq.user.username} на {wreq.amount} руб. одобрен. Баланс пользователя уже был обнулён при подаче заявки.",
+                )
+            else:
+                wreq.user.balance = (wreq.user.balance or 0) + wreq.amount
+                wreq.user.save(update_fields=["balance"])
+                wreq.status = "rejected"
+                messages.info(request, f"Заявка на вывод от @{wreq.user.username} отклонена. Баланс восстановлен.")
+            wreq.processed_at = now
+            wreq.processed_by = request.user
+            wreq.save(update_fields=["status", "processed_at", "processed_by"])
+            return redirect("admin_withdrawal_requests")
+    pending = WithdrawalRequest.objects.filter(status="pending").select_related("user").order_by("created_at")
+    history = (
+        WithdrawalRequest.objects.exclude(status="pending")
+        .select_related("user", "processed_by")
+        .order_by("-created_at")[:200]
+    )
+    return render(
+        request,
+        "core/admin_withdrawal_requests.html",
+        {"pending_requests": pending, "history_requests": history},
+    )
+
+
+# Значения первой строки/заголовка — не считаем контактом (как в боте)
+EXCEL_HEADER_VALUES = frozenset(("value", "значение", "контакт", "данные"))
+
+
+def _excel_contact_value(cell_value) -> str | None:
+    """Возвращает значение контакта из ячейки или None (пусто/заголовок)."""
+    if cell_value is None:
+        return None
+    value = str(cell_value).strip()
+    if not value:
+        return None
+    if value.lower() in EXCEL_HEADER_VALUES:
+        return None
+    return value
+
+
+def _excel_row_is_assigned(row: tuple) -> bool:
+    """Строка «отработана»: в колонках ID/Username/Date (справа от Value) есть данные."""
+    if not row or len(row) < 2:
+        return False
+    for i in (1, 2, 3):
+        if i < len(row) and row[i] is not None and str(row[i]).strip():
+            return True
+    return False
+
+
+BULK_CREATE_BATCH_SIZE = 1000
+
+
+EXCEL_SHEET_MAP = {
+    # Короткие названия
+    "Тг": "telegram",
+    "ТГ": "telegram",
+    "Вотсап": "whatsapp",
+    "Макс": "max",
+    "Вайбер": "viber",
+    "Инст": "instagram",
+    "ВК": "vk",
+    "ВКонтакте": "vk",
+    "Вконтакте": "vk",
+    "вконтакте": "vk",
+    "Ок": "ok",
+    "Почта": "email",
+    # Полные/латинские
+    "Telegram": "telegram",
+    "telegram": "telegram",
+    "WhatsApp": "whatsapp",
+    "Whatsapp": "whatsapp",
+    "whatsapp": "whatsapp",
+    "Max": "max",
+    "max": "max",
+    "Viber": "viber",
+    "viber": "viber",
+    "Нельзяграм": "instagram",
+    "Нельзяграм (там где Reels)": "instagram",
+    "Instagram": "instagram",
+    "instagram": "instagram",
+    "VK": "vk",
+    "Одноклассники": "ok",
+    "одноклассники": "ok",
+    "OK": "ok",
+    "Ok": "ok",
+    "Email": "email",
+    "email": "email",
+    "Почты": "email",
+}
+
+
+@login_required
+def upload_bases_excel(request: HttpRequest) -> HttpResponse:
+    """Редирект на единую страницу загрузки/выгрузки баз."""
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+    return redirect("bases_excel")
+
+
+def _process_excel_all_sheets(wb) -> tuple[int, int, list]:
+    """Обработка книги Excel: все листы по EXCEL_SHEET_MAP. Загружаются только свободные контакты (без ID/User/Date).
+    Пакетная вставка, чтобы не зависать на больших файлах."""
+    total_created = 0
+    total_skipped = 0
+    details = []
+    for sheet in wb.worksheets:
+        base_slug = EXCEL_SHEET_MAP.get(sheet.title)
+        if not base_slug:
+            details.append(f"Лист «{sheet.title}» — неизвестный тип, пропущен")
+            continue
+        try:
+            base_type = BaseType.objects.get(slug=base_slug)
+        except BaseType.DoesNotExist:
+            details.append(f"Лист «{sheet.title}» — база не найдена")
+            continue
+        # Только свободные: в колонках ID/Username/Date (справа от Value) пусто
+        free_values = []
+        for row in sheet.iter_rows(min_row=2, max_col=4, values_only=True):
+            value = _excel_contact_value(row[0] if row else None)
+            if not value:
+                continue
+            if _excel_row_is_assigned(row):
+                continue
+            free_values.append(value)
+        count_before = Contact.objects.filter(base_type=base_type).count()
+        # Пакетная вставка (дубликаты игнорируются)
+        for i in range(0, len(free_values), BULK_CREATE_BATCH_SIZE):
+            chunk = free_values[i : i + BULK_CREATE_BATCH_SIZE]
+            Contact.objects.bulk_create(
+                [Contact(base_type=base_type, value=v) for v in chunk],
+                ignore_conflicts=True,
+            )
+        count_after = Contact.objects.filter(base_type=base_type).count()
+        sheet_created = count_after - count_before
+        sheet_skipped = len(free_values) - sheet_created
+        total_created += sheet_created
+        total_skipped += sheet_skipped
+        details.append(
+            f"«{base_type.name}» — свободных строк {len(free_values)}, добавлено {sheet_created}, дубликатов {sheet_skipped}"
+        )
+    return total_created, total_skipped, details
+
+
+def _process_excel_single_sheet(wb, base_type: BaseType) -> tuple[int, int]:
+    """Обработка книги Excel: первый лист, первый столбец. Только свободные контакты (без ID/User/Date)."""
+    ws = wb.active
+    free_values = []
+    for row in ws.iter_rows(min_row=2, max_col=4, values_only=True):
+        value = _excel_contact_value(row[0] if row else None)
+        if not value:
+            continue
+        if _excel_row_is_assigned(row):
+            continue
+        free_values.append(value)
+    count_before = Contact.objects.filter(base_type=base_type).count()
+    for i in range(0, len(free_values), BULK_CREATE_BATCH_SIZE):
+        chunk = free_values[i : i + BULK_CREATE_BATCH_SIZE]
+        Contact.objects.bulk_create(
+            [Contact(base_type=base_type, value=v) for v in chunk],
+            ignore_conflicts=True,
+        )
+    count_after = Contact.objects.filter(base_type=base_type).count()
+    return count_after - count_before, len(free_values) - (count_after - count_before)
+
+
+@login_required
+def bases_excel(request: HttpRequest) -> HttpResponse:
+    """Одна страница: загрузка по категории, загрузка всех листов (шаблон бота), выгрузка."""
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+
+    base_types = list(BaseType.objects.all().order_by("order"))
+    form_all = BaseExcelUploadForm()
+    form_category = BaseCategoryUploadForm()
+
+    if request.method == "POST":
+        if "upload_all" in request.POST:
+            form_all = BaseExcelUploadForm(request.POST, request.FILES)
+            if form_all.is_valid():
+                file = form_all.cleaned_data["file"]
+                if not (file and file.name and file.name.lower().endswith(".xlsx")):
+                    messages.error(request, "Нужен файл в формате .xlsx")
+                else:
+                    try:
+                        wb = load_workbook(file, read_only=True)
+                        created, skipped, details = _process_excel_all_sheets(wb)
+                        wb.close()
+                        messages.success(
+                            request,
+                            "Импорт завершён. Добавлено {} контактов, пропущено (дубликаты) {}.\n\n{}".format(
+                                created, skipped, "\n".join(details)
+                            ),
+                        )
+                        return redirect("bases_excel")
+                    except Exception as e:
+                        messages.error(request, f"Ошибка при обработке файла: {e}")
+        elif "upload_category" in request.POST:
+            form_category = BaseCategoryUploadForm(request.POST, request.FILES)
+            if form_category.is_valid():
+                base_type = form_category.cleaned_data["base_type"]
+                file = form_category.cleaned_data["file"]
+                if not (file and file.name and file.name.lower().endswith(".xlsx")):
+                    messages.error(request, "Нужен файл в формате .xlsx")
+                else:
+                    try:
+                        wb = load_workbook(file, read_only=True)
+                        created, skipped = _process_excel_single_sheet(wb, base_type)
+                        wb.close()
+                        messages.success(
+                            request,
+                            f"База «{base_type.name}»: добавлено {created} контактов, пропущено (дубликаты) {skipped}.",
+                        )
+                        return redirect("bases_excel")
+                    except Exception as e:
+                        messages.error(request, f"Ошибка при обработке файла: {e}")
+
+    # Названия листов для подсказки (как в боте)
+    sheet_names_hint = "Тг, Вотсап, Макс, Вайбер, Инст, ВК, Ок, Почта (или Telegram, WhatsApp и т.д.)"
+    return render(
+        request,
+        "core/bases_excel.html",
+        {
+            "form_all": form_all,
+            "form_category": form_category,
+            "base_types": base_types,
+            "sheet_names_hint": sheet_names_hint,
+        },
+    )
+
+
+def _make_bases_excel_response(wb, filename: str) -> HttpResponse:
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required
+def download_bases_excel(request: HttpRequest) -> HttpResponse:
+    """Выгрузка всех баз контактов в один Excel (по листам)."""
+
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+
+    wb = Workbook()
+    first_sheet = True
+
+    for base in BaseType.objects.all().order_by("order"):
+        contacts = Contact.objects.filter(base_type=base).order_by("id")
+
+        if first_sheet:
+            ws = wb.active
+            ws.title = base.name[:31]
+            first_sheet = False
+        else:
+            ws = wb.create_sheet(title=base.name[:31])
+
+        ws.append(["Value", "User", "Assigned at"])
+        for c in contacts:
+            ws.append(
+                [
+                    c.value,
+                    c.assigned_to.username if c.assigned_to else "",
+                    c.assigned_at.isoformat() if c.assigned_at else "",
+                ]
+            )
+
+    return _make_bases_excel_response(wb, "bases.xlsx")
+
+
+@login_required
+def download_bases_excel_category(request: HttpRequest, base_type_id: int) -> HttpResponse:
+    """Выгрузка одной базы контактов по категории."""
+
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+
+    base_type = get_object_or_404(BaseType, pk=base_type_id)
+    contacts = Contact.objects.filter(base_type=base_type).order_by("id")
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = base_type.name[:31]
+    ws.append(["Value", "User", "Assigned at"])
+    for c in contacts:
+        ws.append(
+            [
+                c.value,
+                c.assigned_to.username if c.assigned_to else "",
+                c.assigned_at.isoformat() if c.assigned_at else "",
+            ]
+        )
+
+    safe_name = base_type.slug or "base"
+    return _make_bases_excel_response(wb, f"bases_{safe_name}.xlsx")
+
+
+@login_required
+def download_leads_excel(request: HttpRequest) -> HttpResponse:
+    """Выгрузка всех лидов в один Excel."""
+
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Лиды"
+
+    ws.append(
+        [
+            "ID",
+            "Пользователь",
+            "Тип лида",
+            "Тип базы",
+            "Контакт (raw)",
+            "Источник",
+            "Комментарий",
+            "Создан",
+        ]
+    )
+
+    leads = (
+        Lead.objects.select_related("user", "lead_type", "base_type")
+        .all()
+        .order_by("-created_at")
+    )
+
+    for lead in leads:
+        ws.append(
+            [
+                lead.id,
+                lead.user.username,
+                lead.lead_type.name if lead.lead_type else "",
+                lead.base_type.name if lead.base_type else "",
+                lead.raw_contact,
+                lead.source,
+                lead.comment,
+                lead.created_at.isoformat(),
+            ]
+        )
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = 'attachment; filename="leads.xlsx"'
+    return response
+

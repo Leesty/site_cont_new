@@ -1,0 +1,17 @@
+<div class="support-panel-inner">
+  <div class="support-panel-header d-flex align-items-center justify-content-between">
+    <span>Чат с поддержкой</span>
+    <button type="button" class="support-panel-close btn btn-link btn-sm p-0 text-white-50" aria-label="Закрыть">×</button>
+  </div>
+  <div class="support-panel-body">
+    {% include "core/partials/support_messages.html" with support_messages=support_messages %}
+  </div>
+  <form id="support-form" class="support-panel-form" enctype="multipart/form-data" method="post" action="{% url 'support_widget' %}">
+    {% csrf_token %}
+    <textarea name="text" class="form-control form-control-sm mb-1" rows="2" placeholder="Сообщение..."></textarea>
+    <div class="d-flex align-items-center gap-2">
+      <input type="file" name="attachment" class="form-control form-control-sm" accept="image/*,.pdf" style="max-width: 180px;">
+      <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
+    </div>
+  </form>
+</div>
