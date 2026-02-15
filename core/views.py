@@ -18,6 +18,11 @@ from django.conf import settings
 from .models import BaseType, Contact, ContactRequest, Lead, SupportMessage, SupportThread, User, UserBaseLimit, WithdrawalRequest
 
 
+def health_check(request: HttpRequest) -> HttpResponse:
+    """Лёгкая проверка состояния без БД и сессий — для health check платформы (Timeweb и т.д.)."""
+    return HttpResponse("ok", content_type="text/plain")
+
+
 def index(request: HttpRequest) -> HttpResponse:
     """Лендинг: короткое описание сервиса и ссылки на вход/регистрацию."""
     if request.user.is_authenticated:
