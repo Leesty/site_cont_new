@@ -15,6 +15,15 @@ DEBUG = os.getenv("DJANGO_DEBUG", "True") == "True"
 
 ALLOWED_HOSTS: list[str] = [h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
 
+# Истоки, с которых разрешены POST-запросы (HTTPS за прокси). Иначе при регистрации/логине — 403 CSRF.
+_origins = []
+for _h in ALLOWED_HOSTS:
+    if _h in ("localhost", "127.0.0.1"):
+        _origins.append(f"http://{_h}")
+    else:
+        _origins.extend((f"https://{_h}", f"http://{_h}"))
+CSRF_TRUSTED_ORIGINS = _origins
+
 
 INSTALLED_APPS = [
     "django.contrib.admin",
