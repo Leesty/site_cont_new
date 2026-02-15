@@ -1,3 +1,4 @@
+import logging
 from datetime import date, datetime, time, timedelta, timezone as dt_utc
 from zoneinfo import ZoneInfo
 
@@ -16,6 +17,8 @@ from .lead_utils import compress_lead_attachment, determine_base_type_for_contac
 from django.conf import settings
 
 from .models import BaseType, Contact, ContactRequest, Lead, SupportMessage, SupportThread, User, UserBaseLimit, WithdrawalRequest
+
+logger = logging.getLogger(__name__)
 
 
 def health_check(request: HttpRequest) -> HttpResponse:
@@ -42,13 +45,20 @@ def register(request: HttpRequest) -> HttpResponse:
 
     if request.method == "POST":
         form = UserRegistrationForm(request.POST)
-        if form.is_valid():
-            form.save()
-            messages.success(
+        try:
+            if form.is_valid():
+                form.save()
+                messages.success(
+                    request,
+                    "Регистрация прошла успешно. Войдите в личный кабинет, используя логин и пароль.",
+                )
+                return redirect("login")
+        except Exception as e:
+            logger.exception("Ошибка при регистрации: %s", e)
+            messages.error(
                 request,
-                "Регистрация прошла успешно. Войдите в личный кабинет, используя логин и пароль.",
+                "Не удалось завершить регистрацию. Проверьте логин (возможно, он уже занят) или попробуйте позже.",
             )
-            return redirect("login")
     else:
         form = UserRegistrationForm()
 
