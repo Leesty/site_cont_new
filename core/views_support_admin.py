@@ -11,8 +11,9 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Case, Count, F, IntegerField, Max, Q, Value, When
-from django.http import HttpRequest, HttpResponse, HttpResponseForbidden
+from django.http import FileResponse, HttpRequest, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from openpyxl import Workbook, load_workbook
@@ -325,6 +326,24 @@ def admin_lead_rework(request: HttpRequest, user_id: int, lead_id: int) -> HttpR
 
 
 @login_required
+def admin_lead_attachment(request: HttpRequest, user_id: int, lead_id: int) -> HttpResponse:
+    """Отдаёт вложение лида (фото/видео). Доступ: staff или владелец лида. В проде /media/ не раздаётся — используем эту вьюху."""
+    lead = get_object_or_404(Lead, pk=lead_id, user_id=user_id)
+    if not lead.attachment:
+        return HttpResponseForbidden("У этого лида нет вложения.")
+    if not _require_support(request) and request.user.id != lead.user_id:
+        return HttpResponseForbidden("Нет доступа к этому файлу.")
+    try:
+        f = lead.attachment.open("rb")
+    except OSError:
+        return HttpResponseForbidden("Файл не найден на диске.")
+    filename = lead.attachment.name.split("/")[-1] if lead.attachment.name else "attachment"
+    response = FileResponse(f, as_attachment=False)
+    response["Content-Disposition"] = f'inline; filename="{filename}"'
+    return response
+
+
+@login_required
 def admin_user_leads_export(request: HttpRequest, user_id: int, period: str) -> HttpResponse:
     """Выгрузка лидов пользователя за сегодня, вчера или все (Excel). В колонке «Скриншот» — ссылка на файл."""
     if not _require_support(request):
@@ -360,7 +379,9 @@ def admin_user_leads_export(request: HttpRequest, user_id: int, period: str) -> 
     for lead in leads:
         screenshot_url = ""
         if lead.attachment:
-            screenshot_url = request.build_absolute_uri(lead.attachment.url)
+            screenshot_url = request.build_absolute_uri(
+                reverse("admin_lead_attachment", args=[lead.user_id, lead.id])
+            )
         ws.append(
             [
                 lead.id,

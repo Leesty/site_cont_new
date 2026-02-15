@@ -75,6 +75,11 @@ urlpatterns = [
         name="admin_lead_rework",
     ),
     path(
+        "staff/users/<int:user_id>/leads/<int:lead_id>/attachment/",
+        views_support_admin.admin_lead_attachment,
+        name="admin_lead_attachment",
+    ),
+    path(
         "staff/users/<int:user_id>/leads-export/<slug:period>/",
         views_support_admin.admin_user_leads_export,
         name="admin_user_leads_export",

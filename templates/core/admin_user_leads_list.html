@@ -72,9 +72,9 @@
                 <td>
                   {% if lead.attachment %}
                     {% if lead.attachment|lead_attachment_is_video %}
-                      <a href="{{ lead.attachment.url }}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">Смотреть видео</a>
+                      <a href="{% url 'admin_lead_attachment' lead.user_id lead.id %}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">Смотреть видео</a>
                     {% else %}
-                      <a href="{{ lead.attachment.url }}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">Открыть</a>
+                      <a href="{% url 'admin_lead_attachment' lead.user_id lead.id %}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">Открыть</a>
                     {% endif %}
                   {% else %}
                     <span class="text-muted">—</span>
