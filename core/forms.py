@@ -90,10 +90,11 @@ class LeadReportForm(forms.ModelForm):
                 }
             ),
             "lead_date": forms.DateInput(
+                format="%Y-%m-%d",
                 attrs={
                     "type": "date",
                     "class": "form-control",
-                    "style": "background-color: rgba(15, 23, 42, 0.95); border: 1px solid rgba(55, 65, 81, 0.9); color: #e5e7eb;",
+                    "style": "background-color: rgba(15, 23, 42, 0.95); border: 1px solid rgba(55, 65, 81, 0.9); color: #e5e7eb; cursor: pointer;",
                 }
             ),
             "raw_contact": forms.TextInput(
