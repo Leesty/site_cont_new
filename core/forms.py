@@ -56,6 +56,8 @@ class BaseRequestForm(forms.Form):
 LEAD_ATTACHMENT_IMAGE_EXTENSIONS = frozenset(("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic"))
 LEAD_ATTACHMENT_VIDEO_EXTENSIONS = frozenset(("mp4", "mov", "webm", "m4v", "3gp"))
 LEAD_ATTACHMENT_ALLOWED_EXTENSIONS = LEAD_ATTACHMENT_IMAGE_EXTENSIONS | LEAD_ATTACHMENT_VIDEO_EXTENSIONS
+# Максимальный размер вложения (30 МБ), чтобы тяжёлые видео не ломали загрузку
+LEAD_ATTACHMENT_MAX_SIZE = 30 * 1024 * 1024
 
 
 class LeadReportForm(forms.ModelForm):
@@ -122,6 +124,11 @@ class LeadReportForm(forms.ModelForm):
         if ext not in LEAD_ATTACHMENT_ALLOWED_EXTENSIONS:
             raise forms.ValidationError(
                 "Разрешены только изображения и видео (скриншот или запись экрана): jpg, png, gif, webp, mp4, mov и т.д."
+            )
+        size = getattr(data, "size", None)
+        if size is not None and size > LEAD_ATTACHMENT_MAX_SIZE:
+            raise forms.ValidationError(
+                "Размер файла не должен превышать 30 МБ. Сожмите видео или приложите скриншот."
             )
         return data
 
@@ -203,6 +210,11 @@ class LeadReworkUserForm(forms.Form):
         if ext not in LEAD_ATTACHMENT_ALLOWED_EXTENSIONS:
             raise forms.ValidationError(
                 "Разрешены только изображения и видео: jpg, png, gif, webp, mp4, mov и т.д."
+            )
+        size = getattr(data, "size", None)
+        if size is not None and size > LEAD_ATTACHMENT_MAX_SIZE:
+            raise forms.ValidationError(
+                "Размер файла не должен превышать 30 МБ. Сожмите видео или приложите скриншот."
             )
         return data
 

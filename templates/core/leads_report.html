@@ -40,6 +40,7 @@
 
   <p class="text-muted">
     Заполните форму: укажите контакт или ссылку, выберите категорию лида и загрузите скриншот или запись экрана (видео).
+    Максимальный размер файла — 30 МБ. Сайт разрешит отправить отчёт только после выбора подходящего файла.
     Все лиды проверяются модераторами. Если возникли вопросы — пишите в поддержку.
   </p>
 
@@ -76,12 +77,13 @@
       {% endif %}
     </div>
 
-    <div class="mb-3">
+    <div class="mb-3" id="lead-attachment-wrap">
       <label class="form-label" for="{{ form.attachment.id_for_label }}">{{ form.attachment.label }}</label>
       {{ form.attachment }}
       {% if form.attachment.help_text %}
         <div class="form-text">{{ form.attachment.help_text }}</div>
       {% endif %}
+      <div id="lead-attachment-status" class="small mt-1" aria-live="polite"></div>
       {% if form.attachment.errors %}
         <div class="text-danger small">{% for error in form.attachment.errors %}{{ error }}{% endfor %}</div>
       {% endif %}
@@ -104,6 +106,64 @@
       </div>
     {% endif %}
 
-    <button type="submit" class="btn btn-primary">Отправить отчёт</button>
+    <button type="submit" class="btn btn-primary" id="lead-report-submit" disabled>Отправить отчёт</button>
   </form>
+
+  <script>
+  (function() {
+    var MAX_SIZE = 30 * 1024 * 1024;
+    var ALLOWED_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'mp4', 'mov', 'webm', 'm4v', '3gp'];
+    var form = document.querySelector('.leads-report-form');
+    var input = document.getElementById('id_attachment');
+    var statusEl = document.getElementById('lead-attachment-status');
+    var submitBtn = document.getElementById('lead-report-submit');
+
+    function formatSize(bytes) {
+      if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' МБ';
+      return (bytes / 1024).toFixed(0) + ' КБ';
+    }
+
+    function setStatus(msg, isError) {
+      statusEl.textContent = msg;
+      statusEl.className = 'small mt-1 ' + (isError ? 'text-danger' : 'text-success');
+    }
+
+    function checkFile() {
+      var files = input && input.files;
+      if (!files || !files.length) {
+        submitBtn.disabled = true;
+        setStatus('Выберите скриншот или видео — после проверки файла кнопка «Отправить отчёт» станет активной.', false);
+        return;
+      }
+      var file = files[0];
+      var ext = (file.name || '').split('.').pop().toLowerCase();
+      if (ALLOWED_EXT.indexOf(ext) === -1) {
+        submitBtn.disabled = true;
+        setStatus('Разрешены только изображения и видео (jpg, png, gif, webp, mp4, mov и т.д.). Выберите другой файл.', true);
+        return;
+      }
+      if (file.size > MAX_SIZE) {
+        submitBtn.disabled = true;
+        setStatus('Файл слишком большой (' + formatSize(file.size) + '). Максимум 30 МБ. Сожмите видео или приложите скриншот.', true);
+        return;
+      }
+      submitBtn.disabled = false;
+      setStatus('Файл выбран: ' + file.name + ' (' + formatSize(file.size) + '). Можно отправить отчёт.', false);
+    }
+
+    if (input) {
+      input.addEventListener('change', checkFile);
+      checkFile();
+    } else {
+      submitBtn.disabled = false;
+    }
+
+    if (form) {
+      form.addEventListener('submit', function() {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Отправка…';
+      });
+    }
+  })();
+  </script>
 {% endblock %}

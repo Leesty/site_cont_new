@@ -119,6 +119,11 @@ LOGOUT_REDIRECT_URL = "index"
 # Минимальный баланс для кнопки «Запрос на вывод» (руб.)
 WITHDRAWAL_MIN_BALANCE = int(os.getenv("WITHDRAWAL_MIN_BALANCE", "500"))
 
+# Лимит загрузки файлов: вложения лидов (скрин/видео) до 30 МБ
+_DATA_UPLOAD_MAX = 33 * 1024 * 1024  # 33 МБ, чтобы 30 МБ файл проходил
+DATA_UPLOAD_MAX_MEMORY_SIZE = _DATA_UPLOAD_MAX
+FILE_UPLOAD_MAX_MEMORY_SIZE = _DATA_UPLOAD_MAX
+
 # Рекомендации для продакшена (см. SECURITY.md):
 # - DEBUG = False, задать SECRET_KEY и ALLOWED_HOSTS из окружения
 # - Включить валидаторы паролей: AUTH_PASSWORD_VALIDATORS с PasswordValidator
