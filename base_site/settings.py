@@ -142,8 +142,10 @@ if USE_S3_MEDIA_ENV and _s3_bucket and _s3_access and _s3_secret:
             "BACKEND": "storages.backends.s3.S3Storage",
             "OPTIONS": _s3_options,
         },
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        },
     }
-    # Для обратной совместимости (если что-то читает DEFAULT_FILE_STORAGE)
     DEFAULT_FILE_STORAGE = "storages.backends.s3.S3Storage"
     AWS_ACCESS_KEY_ID = _s3_access
     AWS_SECRET_ACCESS_KEY = _s3_secret
@@ -153,7 +155,15 @@ if USE_S3_MEDIA_ENV and _s3_bucket and _s3_access and _s3_secret:
         AWS_S3_ENDPOINT_URL = _s3_endpoint
         AWS_S3_SIGNATURE_VERSION = "s3v4"
 else:
-    # Конфиг из БД: админка → «Настройки хранилища медиа (S3)».
+    # Медиа из админки (ConfigurableMediaStorage). Статика — WhiteNoise.
+    STORAGES = {
+        "default": {
+            "BACKEND": "core.storage.ConfigurableMediaStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        },
+    }
     DEFAULT_FILE_STORAGE = "core.storage.ConfigurableMediaStorage"
 
 
