@@ -21,7 +21,6 @@ urlpatterns = [
     path("contacts/", views.contacts_placeholder, name="contacts"),
     path("contacts/download/", views.download_my_contacts_txt, name="download_my_contacts_txt"),
     path("contacts/request/", views.request_contact_create, name="request_contact_create"),
-    path("balance/withdraw/", views.request_withdrawal_create, name="request_withdrawal_create"),
     path("leads/report/", views.leads_report_placeholder, name="leads_report"),
     path("leads/my/", views.leads_my_list, name="leads_my_list"),
     path("leads/<int:lead_id>/redo/", views.lead_redo, name="lead_redo"),
@@ -38,11 +37,6 @@ urlpatterns = [
         "staff/contact-requests/",
         views_support_admin.admin_contact_requests,
         name="admin_contact_requests",
-    ),
-    path(
-        "staff/withdrawal-requests/",
-        views_support_admin.admin_withdrawal_requests,
-        name="admin_withdrawal_requests",
     ),
     path(
         "staff/users/",
@@ -98,11 +92,6 @@ urlpatterns = [
         "staff/users/<int:user_id>/limits/",
         views_support_admin.admin_user_limits,
         name="admin_user_limits",
-    ),
-    path(
-        "staff/users/<int:user_id>/balance/",
-        views_support_admin.admin_user_balance,
-        name="admin_user_balance",
     ),
     path(
         "support/threads/by-user/<int:user_id>/",

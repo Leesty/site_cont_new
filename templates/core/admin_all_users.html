@@ -12,7 +12,6 @@
     Всего пользователей: <strong>{{ total_users_count }}</strong>.
     Активных за сегодня: <strong>{{ active_today_count }}</strong>.
     Активных за вчера: <strong>{{ active_yesterday_count }}</strong>.
-    Общий баланс пользователей: <strong>{{ total_balance|default:0 }} руб.</strong>
   </p>
 
   <ul class="nav nav-tabs mb-3">
@@ -41,7 +40,6 @@
             <tr>
               <th>Пользователь</th>
               <th>Статус</th>
-              <th>Баланс</th>
               <th>Регистрация</th>
               <th style="width: 1%; white-space: nowrap;">Действия</th>
             </tr>
@@ -59,11 +57,9 @@
                     <span class="badge bg-secondary">Заблокирован</span>
                   {% endif %}
                 </td>
-                <td>{{ u.balance|default:0 }}</td>
                 <td>{{ u.date_joined|date:"d.m.Y H:i" }}</td>
                 <td>
                   <div class="d-flex flex-wrap gap-1">
-                    <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_user_balance' u.pk %}" title="Баланс">Баланс</a>
                     <a class="btn btn-outline-primary btn-sm" href="{% url 'support_thread_by_user' u.pk %}" title="Написать">Написать</a>
                     <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_user_lead_stats' u.pk %}" title="Статистика лидов">Статистика</a>
                     <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_user_leads_list' u.pk %}" title="Отчёты (лиды)">Отчёты</a>
@@ -72,7 +68,7 @@
               </tr>
             {% empty %}
               <tr>
-                <td colspan="5" class="text-muted py-4 text-center">Пользователей пока нет.</td>
+                <td colspan="4" class="text-muted py-4 text-center">Пользователей пока нет.</td>
               </tr>
             {% endfor %}
           </tbody>

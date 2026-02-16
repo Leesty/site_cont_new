@@ -18,7 +18,7 @@ from .forms import BaseRequestForm, LeadReportForm, LeadReworkUserForm, UserRegi
 from .lead_utils import compress_lead_attachment, determine_base_type_for_contact, normalize_lead_contact
 from django.conf import settings
 
-from .models import BaseType, Contact, ContactRequest, Lead, SupportMessage, SupportThread, User, UserBaseLimit, WithdrawalRequest
+from .models import BaseType, Contact, ContactRequest, Lead, SupportMessage, SupportThread, User, UserBaseLimit
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,6 @@ def dashboard(request: HttpRequest) -> HttpResponse:
             Q(last_read_at__isnull=True) | Q(updated_at__gt=F("last_read_at"))
         ).count()
         contact_requests_pending_count = ContactRequest.objects.filter(status="pending").count()
-        withdrawal_requests_pending_count = WithdrawalRequest.objects.filter(status="pending").count()
         pending_leads_count = Lead.objects.filter(
             status__in=(Lead.Status.PENDING, Lead.Status.REWORK)
         ).count()
@@ -100,14 +99,9 @@ def dashboard(request: HttpRequest) -> HttpResponse:
                 "pending_requests_count": pending_count,
                 "unread_threads_count": unread_threads_count,
                 "contact_requests_pending_count": contact_requests_pending_count,
-                "withdrawal_requests_pending_count": withdrawal_requests_pending_count,
                 "pending_leads_count": pending_leads_count,
             },
         )
-    withdrawal_min = getattr(settings, "WITHDRAWAL_MIN_BALANCE", 500)
-    balance = getattr(user, "balance", 0) or 0
-    withdrawal_pending = WithdrawalRequest.objects.filter(user=user, status="pending").exists()
-    can_request_withdrawal = balance >= withdrawal_min and not withdrawal_pending
     # Есть ли непрочитанные сообщения от поддержки
     support_has_unread = False
     thread = SupportThread.objects.filter(user=user).order_by("-updated_at").first()
@@ -125,9 +119,6 @@ def dashboard(request: HttpRequest) -> HttpResponse:
         "core/dashboard.html",
         {
             "user": user,
-            "withdrawal_min_balance": withdrawal_min,
-            "withdrawal_pending": withdrawal_pending,
-            "can_request_withdrawal": can_request_withdrawal,
             "support_has_unread": support_has_unread,
             "rework_leads_count": rework_leads_count,
         },
@@ -140,7 +131,6 @@ def account_updates_api(request: HttpRequest) -> HttpResponse:
     user = request.user
     data = {
         "support_has_unread": False,
-        "balance": getattr(user, "balance", 0) or 0,
         "leads_updated_at": None,
     }
     if _is_admin(user):
@@ -152,7 +142,6 @@ def account_updates_api(request: HttpRequest) -> HttpResponse:
             ).count(),
             "pending_requests_count": User.objects.filter(status=User.Status.PENDING).count(),
             "contact_requests_pending_count": ContactRequest.objects.filter(status="pending").count(),
-            "withdrawal_requests_pending_count": WithdrawalRequest.objects.filter(status="pending").count(),
             "pending_leads_count": Lead.objects.filter(
                 status__in=(Lead.Status.PENDING, Lead.Status.REWORK)
             ).count(),
@@ -364,75 +353,6 @@ def download_my_contacts_txt(request: HttpRequest) -> HttpResponse:
 
 
 @login_required
-def request_withdrawal_create(request: HttpRequest) -> HttpResponse:
-    """Создать заявку на вывод средств (доступно при балансе >= WITHDRAWAL_MIN_BALANCE).
-
-    GET  — показать форму с указанием реквизитов.
-    POST — создать заявку и обнулить баланс.
-    """
-    if not _ensure_user_approved(request):
-        return redirect("dashboard")
-    user = request.user
-    withdrawal_min = getattr(settings, "WITHDRAWAL_MIN_BALANCE", 500)
-    balance = getattr(user, "balance", 0) or 0
-    if balance < withdrawal_min:
-        messages.warning(request, f"Заявка на вывод доступна при балансе от {withdrawal_min} руб.")
-        return redirect("dashboard")
-    if WithdrawalRequest.objects.filter(user=user, status="pending").exists():
-        messages.info(request, "У вас уже есть заявка на вывод на рассмотрении.")
-        return redirect("dashboard")
-
-    if request.method == "POST":
-        payout_details = (request.POST.get("payout_details") or "").strip()
-        if not payout_details:
-            messages.error(request, "Укажите способ вывода: номер карты или телефона и банк.")
-            return render(
-                request,
-                "core/withdrawal_request.html",
-                {
-                    "user": user,
-                    "balance": balance,
-                    "withdrawal_min_balance": withdrawal_min,
-                    "payout_details": payout_details,
-                },
-            )
-        with transaction.atomic():
-            user_refresh = User.objects.select_for_update().get(pk=user.pk)
-            current_balance = getattr(user_refresh, "balance", 0) or 0
-            if WithdrawalRequest.objects.filter(user=user_refresh, status="pending").exists():
-                messages.info(request, "У вас уже есть заявка на вывод на рассмотрении.")
-                return redirect("dashboard")
-            if current_balance < withdrawal_min:
-                messages.warning(request, f"Заявка на вывод доступна при балансе от {withdrawal_min} руб.")
-                return redirect("dashboard")
-            WithdrawalRequest.objects.create(
-                user=user_refresh,
-                amount=current_balance,
-                payout_details=payout_details,
-                status="pending",
-            )
-            user_refresh.balance = 0
-            user_refresh.save(update_fields=["balance"])
-        messages.success(
-            request,
-            f"Заявка на вывод {current_balance} руб. отправлена. Баланс обнулён. Ожидайте решения администратора.",
-        )
-        return redirect("dashboard")
-
-    # GET — показать форму c реквизитами
-    return render(
-        request,
-        "core/withdrawal_request.html",
-        {
-            "user": user,
-            "balance": balance,
-            "withdrawal_min_balance": withdrawal_min,
-            "payout_details": "",
-        },
-    )
-
-
-@login_required
 def request_contact_create(request: HttpRequest) -> HttpResponse:
     """Создать заявку на дополнительный лимит контактов (кнопка «Обратиться»)."""
     if not _ensure_user_approved(request):
@@ -539,7 +459,6 @@ def leads_my_list(request: HttpRequest) -> HttpResponse:
     paginator = Paginator(leads_qs, 30)
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
-    lead_approve_reward = getattr(settings, "LEAD_APPROVE_REWARD", 40)
     agg = Lead.objects.filter(user=user).aggregate(m=Max("updated_at"))
     leads_updated_at = agg["m"].isoformat() if agg.get("m") else ""
     return render(
@@ -547,7 +466,6 @@ def leads_my_list(request: HttpRequest) -> HttpResponse:
         "core/leads_my_list.html",
         {
             "page_obj": page_obj,
-            "lead_approve_reward": lead_approve_reward,
             "leads_updated_at": leads_updated_at,
         },
     )

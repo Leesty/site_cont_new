@@ -9,7 +9,7 @@
   </div>
 
   <p class="text-muted small mb-4">
-    Статусы проверки лидов. Одобренные лиды оплачиваются автоматически.
+    Статусы проверки лидов. Статусы проверки лидов.
   </p>
 
   {% if page_obj.object_list %}
@@ -26,7 +26,7 @@
                 {% if lead.status == 'pending' %}
                   <span class="badge bg-secondary ms-1">На проверке</span>
                 {% elif lead.status == 'approved' %}
-                  <span class="badge bg-success ms-1">Одобрен +{{ lead_approve_reward }} руб.</span>
+                  <span class="badge bg-success ms-1">Одобрен</span>
                 {% elif lead.status == 'rejected' %}
                   <span class="badge bg-danger ms-1">Отклонён</span>
                   {% if lead.rejection_reason %}

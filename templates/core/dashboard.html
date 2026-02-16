@@ -10,20 +10,7 @@
         Добро пожаловать, {{ user.username }}. Здесь собраны все инструменты работы с базами и лидами.
       </p>
     </div>
-    <div class="text-end d-flex flex-column flex-md-row align-items-end gap-2">
-      <span class="badge bg-primary fs-6 px-3 py-2">Баланс: {{ user.balance|default:0 }} руб.</span>
-      {% if withdrawal_pending %}
-        <span class="badge bg-warning text-dark">Заявка на вывод на рассмотрении</span>
-      {% elif can_request_withdrawal %}
-        <a class="btn btn-success btn-sm" href="{% url 'request_withdrawal_create' %}">Запросить вывод</a>
-      {% endif %}
-    </div>
   </div>
-  {% if can_request_withdrawal and not withdrawal_pending %}
-    <p class="text-muted small mb-2">
-      Вывод от {{ withdrawal_min_balance }} рублей. При подаче заявки баланс обнулится; после решения админа средства будут переведены или возвращены на баланс.
-    </p>
-  {% endif %}
 
   {% if rework_leads_count %}
     <div class="alert alert-warning d-flex align-items-center mb-3" role="alert">

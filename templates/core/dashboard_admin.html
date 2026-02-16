@@ -91,22 +91,6 @@
     <div class="col">
       <div class="card h-100 shadow-sm">
         <div class="card-body">
-          <div class="card-icon contacts mb-2">💰</div>
-          <h2 class="h5 mb-2">Заявки на вывод</h2>
-          <p class="text-muted small mb-3">
-            Пользователи запросили вывод средств (баланс в рублях). Одобрить или отклонить.
-          </p>
-          <div class="d-flex align-items-center gap-2">
-            <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_withdrawal_requests' %}">Перейти</a>
-            <span id="admin-withdrawal-requests" class="btn btn-danger btn-sm" title="Заявок на вывод" style="{% if not withdrawal_requests_pending_count %}display:none;{% endif %}">{{ withdrawal_requests_pending_count|default:0 }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col">
-      <div class="card h-100 shadow-sm">
-        <div class="card-body">
           <div class="card-icon stats mb-2">📊</div>
           <h2 class="h5 mb-2">Статистика</h2>
           <p class="text-muted small mb-3">
@@ -147,7 +131,7 @@
       <div class="card h-100 shadow-sm">
         <div class="card-body">
           <div class="card-icon report mb-2">☁️</div>
-          <h2 class="h5 mb-2">Хранилище медиа (S3)</h2>
+          <h2 class="h5 mb-2">Хранилище медиа</h2>
           <p class="text-muted small mb-3">
             Куда сохраняются фото и видео из отчётов. Проверка подключения к облаку.
           </p>

@@ -12,7 +12,25 @@
 
   <div class="card shadow-sm">
     <div class="card-body">
-      {% if diag.source == "env" %}
+      {% if diag.source == "local" %}
+        <p class="mb-2 text-success"><strong>Локальное хранение медиа</strong></p>
+        <p class="mb-1">Скриншоты и видео из отчётов сохраняются в папку: <code>{{ diag.media_root|default:"media/" }}</code></p>
+        <form method="post" action="" class="mt-2 mb-2">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="test_write">
+          <button type="submit" class="btn btn-primary btn-sm">Проверить запись</button>
+        </form>
+        {% if write_result %}
+          {% if write_result.ok %}
+            <div class="alert alert-success py-2 mb-2">{{ write_result.message }}</div>
+          {% else %}
+            <div class="alert alert-danger py-2 mb-2"><strong>Ошибка:</strong> {{ write_result.message }}{% if write_result.detail %}<pre class="small mt-2 mb-0">{{ write_result.detail }}</pre>{% endif %}</div>
+          {% endif %}
+        {% endif %}
+        <p class="text-muted small mb-0">
+          При деплое на Timeweb медиа будут на диске сервера. Для облачного хранения можно включить S3 через переменные окружения (<code>USE_S3_MEDIA=1</code>, <code>AWS_*</code>).
+        </p>
+      {% elif diag.source == "s3" %}
         <p class="mb-2"><strong>Сейчас используется S3 из переменных окружения</strong> (<code>USE_S3_MEDIA=1</code>). Все медиа пишутся в бакет в папку <code>media/</code> (внутри: <code>media/leads/user_5/...</code> и т.д.).</p>
         <p class="mb-1">Бакет: <code>{{ diag.bucket|default:"— не задан" }}</code></p>
         <p class="mb-0">Endpoint: <code>{{ diag.endpoint|default:"— по умолчанию" }}</code></p>
@@ -21,7 +39,7 @@
           <input type="hidden" name="action" value="test_write">
           <button type="submit" class="btn btn-primary btn-sm">Проверить запись в S3</button>
         </form>
-        {% if write_result and diag.source == "env" %}
+        {% if write_result and diag.source == "s3" %}
           {% if write_result.ok %}
             <div class="alert alert-success py-2 mb-2">{{ write_result.message }}</div>
           {% else %}

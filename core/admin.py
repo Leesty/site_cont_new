@@ -7,7 +7,7 @@ from . import models
 
 @admin.register(models.User)
 class UserAdmin(admin.ModelAdmin):
-    list_display = ("username", "email", "role", "status", "balance", "is_active", "is_staff")
+    list_display = ("username", "email", "role", "status", "is_active", "is_staff")
     list_filter = ("role", "status", "is_staff", "is_superuser", "is_active")
     search_fields = ("username", "email", "telegram_id")
     ordering = ("username",)
@@ -85,14 +85,6 @@ class BasesImportJobAdmin(admin.ModelAdmin):
     list_filter = ("status",)
     readonly_fields = ("status", "message", "started_by", "created_at", "updated_at")
     ordering = ("-created_at",)
-
-
-@admin.register(models.WithdrawalRequest)
-class WithdrawalRequestAdmin(admin.ModelAdmin):
-    list_display = ("id", "user", "amount", "payout_details", "status", "created_at", "processed_at", "processed_by")
-    list_filter = ("status", "created_at")
-    search_fields = ("user__username",)
-    readonly_fields = ("user", "amount", "payout_details", "created_at")
 
 
 @admin.register(models.MediaStorageConfig)

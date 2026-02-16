@@ -105,7 +105,7 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 
-# Медиафайлы: при наличии бакета и ключей в окружении — только S3 (Timeweb). Иначе — из админки. Локально не сохраняем.
+# Медиафайлы: по умолчанию — локально (media/). S3 опционален через переменные окружения.
 _s3_bucket = os.getenv("AWS_STORAGE_BUCKET_NAME", "").strip()
 _s3_access = os.getenv("AWS_ACCESS_KEY_ID", "").strip()
 _s3_secret = os.getenv("AWS_SECRET_ACCESS_KEY", "").strip()
@@ -114,13 +114,13 @@ _s3_endpoint = os.getenv("AWS_S3_ENDPOINT_URL", "").strip().rstrip("/")
 
 USE_S3_MEDIA_ENV = (
     os.getenv("USE_S3_MEDIA", "").strip().lower() in ("1", "true", "yes")
-    or bool(_s3_bucket and _s3_access and _s3_secret)
+    and bool(_s3_bucket and _s3_access and _s3_secret)
 )
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
-if USE_S3_MEDIA_ENV and _s3_bucket and _s3_access and _s3_secret:
+if USE_S3_MEDIA_ENV:
     # S3 напрямую из переменных окружения (Timeweb Cloud и др.): STORAGES + явные OPTIONS.
     # Timeweb: подпись AWS Signature V4, path-style URL (https://s3.twcstorage.ru/bucket/key).
     # Все медиа — в бакете под префиксом media/ (media/leads/user_5/..., media/support/...).
@@ -155,16 +155,16 @@ if USE_S3_MEDIA_ENV and _s3_bucket and _s3_access and _s3_secret:
         AWS_S3_ENDPOINT_URL = _s3_endpoint
         AWS_S3_SIGNATURE_VERSION = "s3v4"
 else:
-    # Медиа из админки (ConfigurableMediaStorage). Статика — WhiteNoise.
+    # S3 не настроен — медиа сохраняются локально в media/ (скриншоты, видео из отчётов).
     STORAGES = {
         "default": {
-            "BACKEND": "core.storage.ConfigurableMediaStorage",
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+            "OPTIONS": {"location": str(BASE_DIR / "media")},
         },
         "staticfiles": {
             "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
         },
     }
-    DEFAULT_FILE_STORAGE = "core.storage.ConfigurableMediaStorage"
 
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -173,9 +173,6 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "dashboard"
 LOGOUT_REDIRECT_URL = "index"
-
-# Минимальный баланс для кнопки «Запрос на вывод» (руб.)
-WITHDRAWAL_MIN_BALANCE = int(os.getenv("WITHDRAWAL_MIN_BALANCE", "500"))
 
 # Лимит загрузки файлов: вложения лидов (скрин/видео) до 30 МБ
 _DATA_UPLOAD_MAX = 33 * 1024 * 1024  # 33 МБ, чтобы 30 МБ файл проходил

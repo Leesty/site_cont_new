@@ -44,9 +44,6 @@
             {% if user.is_authenticated %}
               <li class="nav-item me-2 text-white-50 align-self-center">
                 {{ user.username }}
-                {% if user.status == 'approved' %}
-                  <span id="navbar-balance" class="badge bg-primary ms-2">Баланс: {{ user.balance|default:0 }} руб.</span>
-                {% endif %}
                 {% if user.status != 'approved' %}
                   <span class="badge bg-warning text-dark ms-2">На модерации</span>
                 {% endif %}
@@ -102,10 +99,6 @@
                 if (badge) {
                   badge.style.display = data.support_has_unread ? '' : 'none';
                 }
-                var balanceEl = document.getElementById('navbar-balance');
-                if (balanceEl) {
-                  balanceEl.textContent = 'Баланс: ' + (data.balance || 0) + ' руб.';
-                }
                 if (leadsUpdatedAt !== '' && data.leads_updated_at && data.leads_updated_at !== leadsUpdatedAt) {
                   location.reload();
                 }
@@ -131,11 +124,6 @@
                   if (el) {
                     el.textContent = a.contact_requests_pending_count || 0;
                     el.style.display = (a.contact_requests_pending_count && a.contact_requests_pending_count > 0) ? '' : 'none';
-                  }
-                  el = document.getElementById('admin-withdrawal-requests');
-                  if (el) {
-                    el.textContent = a.withdrawal_requests_pending_count || 0;
-                    el.style.display = (a.withdrawal_requests_pending_count && a.withdrawal_requests_pending_count > 0) ? '' : 'none';
                   }
                   el = document.getElementById('admin-pending-leads');
                   if (el) {

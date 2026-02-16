@@ -49,10 +49,6 @@ class User(AbstractUser):
         unique=True,
         help_text="При необходимости — связка с Telegram-пользователем.",
     )
-    balance = models.IntegerField(
-        default=0,
-        help_text="Баланс пользователя (руб.). Начисляется вручную админом.",
-    )
 
     def is_approved(self) -> bool:
         return self.status == self.Status.APPROVED
@@ -385,42 +381,6 @@ class ContactRequest(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"Заявка от {self.user} ({self.get_status_display()})"
-
-
-class WithdrawalRequest(TimeStampedModel):
-    """Заявка пользователя на вывод средств (баланс)."""
-
-    user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name="withdrawal_requests",
-    )
-    amount = models.PositiveIntegerField(help_text="Сумма к выводу (руб.)")
-    payout_details = models.TextField(
-        help_text="Способ вывода: номер карты, телефон с банком и т.п.",
-        blank=True,
-    )
-    status = models.CharField(
-        max_length=20,
-        choices=[("pending", "На рассмотрении"), ("approved", "Выполнено"), ("rejected", "Отклонено")],
-        default="pending",
-    )
-    processed_at = models.DateTimeField(null=True, blank=True)
-    processed_by = models.ForeignKey(
-        User,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="processed_withdrawals",
-    )
-
-    class Meta:
-        verbose_name = "Заявка на вывод"
-        verbose_name_plural = "Заявки на вывод"
-        ordering = ["-created_at"]
-
-    def __str__(self) -> str:
-        return f"Вывод {self.amount} от {self.user} ({self.get_status_display()})"
 
 
 class BasesImportJob(TimeStampedModel):

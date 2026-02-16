@@ -1,8 +1,9 @@
-"""Хранилище медиа: только S3 из настроек в БД. Локальное сохранение не используется — при отсутствии/ошибке S3 операции падают с ошибкой."""
+"""Хранилище медиа: только облако (S3). Локальное сохранение не используется."""
 import logging
 import time
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.core.files.storage import FileSystemStorage
 
 logger = logging.getLogger(__name__)
@@ -44,31 +45,44 @@ def clear_media_config_cache():
 
 def get_media_storage_diagnostic():
     """
-    Диагностика хранилища медиа: откуда берётся S3 (env или БД) и подключается ли он.
-    Возвращает dict: source ("env" | "db" | "none"), bucket, endpoint, error (если есть).
+    Диагностика: локальное хранение (media/) или S3 из переменных окружения.
     """
     from django.conf import settings as django_settings
-    use_env = getattr(django_settings, "USE_S3_MEDIA_ENV", False)
-    if use_env:
-        bucket = getattr(django_settings, "AWS_STORAGE_BUCKET_NAME", "") or ""
+    use_s3 = getattr(django_settings, "USE_S3_MEDIA_ENV", False)
+    bucket = getattr(django_settings, "AWS_STORAGE_BUCKET_NAME", "") or ""
+    access = getattr(django_settings, "AWS_ACCESS_KEY_ID", "") or ""
+    secret = getattr(django_settings, "AWS_SECRET_ACCESS_KEY", "") or ""
+    if use_s3 and bucket and access and secret:
         endpoint = getattr(django_settings, "AWS_S3_ENDPOINT_URL", "") or ""
-        return {"source": "env", "bucket": bucket, "endpoint": endpoint, "error": None}
-    config = get_media_config_from_db()
-    if not config or not config.bucket_name or not config.access_key_id or not config.secret_access_key:
-        return {
-            "source": "db",
-            "bucket": "",
-            "endpoint": "",
-            "error": "В админке не включён или не заполнен S3 (Core → Настройки хранилища медиа). Локальное сохранение отключено — загрузки будут падать с ошибкой.",
-        }
-    endpoint = (getattr(config, "endpoint_url", None) or "").strip().rstrip("/")
-    try:
-        from storages.backends.s3 import S3Storage
-        opts = _build_s3_opts(config)
-        S3Storage(**opts)
-        return {"source": "db", "bucket": config.bucket_name, "endpoint": endpoint or "(по умолчанию)", "error": None}
-    except Exception as e:
-        return {"source": "db", "bucket": config.bucket_name, "endpoint": endpoint, "error": str(e)}
+        return {"source": "s3", "bucket": bucket, "endpoint": endpoint, "error": None}
+    media_root = getattr(django_settings, "MEDIA_ROOT", "")
+    return {"source": "local", "bucket": "", "endpoint": "", "media_root": str(media_root), "error": None}
+
+
+class RequireS3MediaStorage(FileSystemStorage):
+    """Заглушка: медиа только в S3. При любой операции — ошибка с подсказкой задать переменные окружения."""
+
+    def _raise(self):
+        raise ImproperlyConfigured(
+            "Медиа только в облаке (S3). Задайте в переменных окружения: "
+            "AWS_STORAGE_BUCKET_NAME, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, "
+            "AWS_S3_ENDPOINT_URL (например https://s3.twcstorage.ru), AWS_S3_REGION_NAME=ru-1"
+        )
+
+    def _save(self, name, content):
+        self._raise()
+
+    def _open(self, name, mode="rb"):
+        self._raise()
+
+    def delete(self, name):
+        self._raise()
+
+    def exists(self, name):
+        self._raise()
+
+    def url(self, name):
+        self._raise()
 
 
 def _build_s3_opts(config):

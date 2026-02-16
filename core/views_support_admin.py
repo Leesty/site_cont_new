@@ -11,7 +11,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.utils import OperationalError, ProgrammingError
-from django.db.models import Case, Count, F, IntegerField, Max, Q, Sum, Value, When
+from django.db.models import Case, Count, F, IntegerField, Max, Q, Value, When
 from django.http import FileResponse, HttpRequest, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -31,7 +31,6 @@ from .models import (
     SupportThread,
     User,
     UserBaseLimit,
-    WithdrawalRequest,
 )
 
 
@@ -271,14 +270,10 @@ def admin_leads_all_new(request: HttpRequest) -> HttpResponse:
             status=500,
             content_type="text/html; charset=utf-8",
         )
-    lead_approve_reward = getattr(settings, "LEAD_APPROVE_REWARD", 40)
     return render(
         request,
         "core/admin_leads_all_new.html",
-        {
-            "page_obj": page_obj,
-            "lead_approve_reward": lead_approve_reward,
-        },
+        {"page_obj": page_obj},
     )
 
 
@@ -312,13 +307,10 @@ def admin_media_storage_status(request: HttpRequest) -> HttpResponse:
     )
 
 
-LEAD_APPROVE_REWARD = getattr(settings, "LEAD_APPROVE_REWARD", 40)
-
-
 @login_required
 @require_http_methods(["POST"])
 def admin_lead_approve(request: HttpRequest, user_id: int, lead_id: int) -> HttpResponse:
-    """Одобрить лид: начислить пользователю LEAD_APPROVE_REWARD руб., статус — одобрен."""
+    """Одобрить лид: статус — одобрен."""
     if not _require_support(request):
         return HttpResponseForbidden("Недостаточно прав.")
     with transaction.atomic():
@@ -337,9 +329,7 @@ def admin_lead_approve(request: HttpRequest, user_id: int, lead_id: int) -> Http
         lead.reviewed_at = timezone.now()
         lead.reviewed_by = request.user
         lead.save(update_fields=["status", "rejection_reason", "rework_comment", "reviewed_at", "reviewed_by"])
-        lead.user.balance = (getattr(lead.user, "balance", 0) or 0) + LEAD_APPROVE_REWARD
-        lead.user.save(update_fields=["balance"])
-    msg = f"Лид #{lead_id} одобрен. Пользователю начислено {LEAD_APPROVE_REWARD} руб."
+    msg = f"Лид #{lead_id} одобрен."
     messages.success(request, msg)
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
         return JsonResponse({"success": True, "message": msg})
@@ -516,37 +506,6 @@ def admin_user_limits(request: HttpRequest, user_id: int) -> HttpResponse:
 
 
 @login_required
-def admin_user_balance(request: HttpRequest, user_id: int) -> HttpResponse:
-    """Начисление или списание рублей пользователю (баланс)."""
-    if not _require_support(request):
-        return HttpResponseForbidden("Недостаточно прав.")
-    target_user = get_object_or_404(User, pk=user_id)
-    if request.method == "POST":
-        try:
-            amount = int(request.POST.get("amount") or 0)
-            action = request.POST.get("action")
-        except (TypeError, ValueError):
-            amount = 0
-            action = None
-        if amount > 0 and action in ("add", "subtract"):
-            current = target_user.balance or 0
-            if action == "add":
-                target_user.balance = current + amount
-            else:
-                target_user.balance = max(0, current - amount)
-            target_user.save(update_fields=["balance"])
-            msg = f"Начислено {amount} руб." if action == "add" else f"Списано {amount} руб."
-            messages.success(request, f"Баланс @{target_user.username}: {msg}. Текущий баланс: {target_user.balance} руб.")
-            return redirect("admin_all_users")
-        messages.warning(request, "Укажите положительное число и действие (начислить / списать).")
-    return render(
-        request,
-        "core/admin_user_balance.html",
-        {"target_user": target_user},
-    )
-
-
-@login_required
 def admin_all_users(request: HttpRequest) -> HttpResponse:
     """Список всех пользователей сайта с вкладками: все, активные за сегодня, активные за вчера."""
     if not _require_support(request):
@@ -580,7 +539,6 @@ def admin_all_users(request: HttpRequest) -> HttpResponse:
         )
     else:
         users_list = User.objects.all().order_by("-date_joined")
-    total_balance = User.objects.aggregate(s=Sum("balance"))["s"] or 0
     return render(
         request,
         "core/admin_all_users.html",
@@ -590,7 +548,6 @@ def admin_all_users(request: HttpRequest) -> HttpResponse:
             "total_users_count": total_users_count,
             "active_today_count": active_today_count,
             "active_yesterday_count": active_yesterday_count,
-            "total_balance": total_balance,
         },
     )
 
@@ -742,61 +699,6 @@ def admin_contact_requests(request: HttpRequest) -> HttpResponse:
         request,
         "core/admin_contact_requests.html",
         {"pending_requests": pending},
-    )
-
-
-@login_required
-def admin_withdrawal_requests(request: HttpRequest) -> HttpResponse:
-    """Список заявок на вывод. Одобрить — подтвердить вывод (баланс уже обнулён). Отклонить — вернуть сумму на баланс."""
-    if not _require_support(request):
-        return HttpResponseForbidden("Недостаточно прав.")
-    if request.method == "POST":
-        req_id = request.POST.get("request_id")
-        action = request.POST.get("action")
-        if req_id and action in ("approve", "reject"):
-            with transaction.atomic():
-                wreq = (
-                    WithdrawalRequest.objects.select_for_update()
-                    .select_related("user")
-                    .filter(pk=req_id, status="pending")
-                    .first()
-                )
-                if not wreq:
-                    messages.warning(request, "Заявка уже обработана или не найдена.")
-                    return redirect("admin_withdrawal_requests")
-                now = timezone.now()
-                if action == "approve":
-                    wreq.status = "approved"
-                    messages.success(
-                        request,
-                        f"Вывод @{wreq.user.username} на {wreq.amount} руб. одобрен. Баланс пользователя уже был обнулён при подаче заявки.",
-                    )
-                else:
-                    wreq.user.balance = (wreq.user.balance or 0) + wreq.amount
-                    wreq.user.save(update_fields=["balance"])
-                    wreq.status = "rejected"
-                    messages.info(request, f"Заявка на вывод от @{wreq.user.username} отклонена. Баланс восстановлен.")
-                wreq.processed_at = now
-                wreq.processed_by = request.user
-                wreq.save(update_fields=["status", "processed_at", "processed_by"])
-            return redirect("admin_withdrawal_requests")
-    pending = WithdrawalRequest.objects.filter(status="pending").select_related("user").order_by("created_at")
-    history = (
-        WithdrawalRequest.objects.exclude(status="pending")
-        .select_related("user", "processed_by")
-        .order_by("-created_at")[:200]
-    )
-    total_approved_withdrawals = (
-        WithdrawalRequest.objects.filter(status="approved").aggregate(s=Sum("amount"))["s"] or 0
-    )
-    return render(
-        request,
-        "core/admin_withdrawal_requests.html",
-        {
-            "pending_requests": pending,
-            "history_requests": history,
-            "total_approved_withdrawals": total_approved_withdrawals,
-        },
     )
 
 
