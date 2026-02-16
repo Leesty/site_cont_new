@@ -63,7 +63,7 @@
                         <a class="btn btn-outline-danger btn-sm" href="{% url 'admin_lead_reject' target_user.pk lead.id %}">Отклонить</a>
                       {% endif %}
                     </div>
-                    {% if lead.status == 'pending' or lead.status == 'rework' %}
+                    {% if lead.status == 'pending' %}
                       <div>
                         <a class="btn btn-warning btn-sm text-dark" href="{% url 'admin_lead_rework' target_user.pk lead.id %}">На доработку</a>
                       </div>
