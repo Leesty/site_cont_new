@@ -282,6 +282,16 @@ def admin_leads_all_new(request: HttpRequest) -> HttpResponse:
     )
 
 
+@login_required
+def admin_media_storage_status(request: HttpRequest) -> HttpResponse:
+    """Диагностика: куда сохраняются медиа (S3 из env или из админки), подключается ли S3."""
+    if not _require_support(request):
+        return HttpResponseForbidden("Недостаточно прав.")
+    from core.storage import get_media_storage_diagnostic
+    diag = get_media_storage_diagnostic()
+    return render(request, "core/admin_media_storage_status.html", {"diag": diag})
+
+
 LEAD_APPROVE_REWARD = getattr(settings, "LEAD_APPROVE_REWARD", 40)
 
 

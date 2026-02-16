@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Хранилище медиа (S3) — Партнёрка{% endblock %}
+
+{% block content %}
+  <div class="mb-3">
+    <h1 class="h4 mb-1">Куда сохраняются фото и видео из отчётов</h1>
+    <p class="text-muted small mb-0">
+      Диагностика: используется ли облачное хранилище S3 или что-то мешает.
+    </p>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      {% if diag.source == "env" %}
+        <p class="mb-2"><strong>Сейчас используется S3 из переменных окружения</strong> (<code>USE_S3_MEDIA=1</code>).</p>
+        <p class="mb-1">Бакет в env: <code>{{ diag.bucket|default:"— не задан" }}</code></p>
+        <p class="mb-0">Endpoint: <code>{{ diag.endpoint|default:"— по умолчанию" }}</code></p>
+        <p class="mt-2 text-muted small">
+          Если в панели S3 у вас другой бакет (например 06dcf8ea-...), то либо задайте в env тот же <code>AWS_STORAGE_BUCKET_NAME</code>, либо уберите <code>USE_S3_MEDIA</code> и настройте S3 в админке (Core → Настройки хранилища медиа).
+        </p>
+      {% elif diag.source == "db" and not diag.error %}
+        <p class="mb-2 text-success"><strong>S3 из админки подключается.</strong></p>
+        <p class="mb-1">Бакет: <code>{{ diag.bucket }}</code></p>
+        <p class="mb-0">Endpoint: <code>{{ diag.endpoint }}</code></p>
+        <p class="mt-2 text-muted small">
+          Новые загрузки должны попадать в этот бакет. Если в панели по-прежнему 0 ГБ — задеплойте последнюю версию кода (без fallback на локальный диск) и загрузите отчёт заново; проверьте логи при загрузке: должна быть строка «Media storage: сохранение в S3».
+        </p>
+      {% elif diag.source == "db" and diag.error %}
+        <p class="mb-2 text-danger"><strong>Ошибка подключения к S3</strong></p>
+        <p class="mb-1">Бакет в настройках: <code>{{ diag.bucket }}</code>, endpoint: <code>{{ diag.endpoint }}</code></p>
+        <p class="mb-0">Ошибка: <code>{{ diag.error }}</code></p>
+        <p class="mt-2 text-muted small">
+          Проверьте в админке (Core → Настройки хранилища медиа): Access Key, Secret Key и Endpoint URL (для Timeweb: <code>https://s3.twcstorage.ru</code> или <code>https://s3.timeweb.cloud</code>). После исправления пересохраните настройки и перезапустите приложение.
+        </p>
+      {% else %}
+        <p class="mb-0 text-warning">{{ diag.error|default:"S3 не настроен." }}</p>
+      {% endif %}
+      <p class="mt-3 mb-0">
+        <a href="{% url 'dashboard' %}">← В кабинет</a>
+      </p>
+    </div>
+  </div>
+{% endblock %}

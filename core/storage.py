@@ -42,6 +42,35 @@ def clear_media_config_cache():
     _MEDIA_CONFIG_CACHE["cache_until"] = 0
 
 
+def get_media_storage_diagnostic():
+    """
+    Диагностика хранилища медиа: откуда берётся S3 (env или БД) и подключается ли он.
+    Возвращает dict: source ("env" | "db" | "none"), bucket, endpoint, error (если есть).
+    """
+    from django.conf import settings as django_settings
+    use_env = getattr(django_settings, "USE_S3_MEDIA_ENV", False)
+    if use_env:
+        bucket = getattr(django_settings, "AWS_STORAGE_BUCKET_NAME", "") or ""
+        endpoint = getattr(django_settings, "AWS_S3_ENDPOINT_URL", "") or ""
+        return {"source": "env", "bucket": bucket, "endpoint": endpoint, "error": None}
+    config = get_media_config_from_db()
+    if not config or not config.bucket_name or not config.access_key_id or not config.secret_access_key:
+        return {
+            "source": "db",
+            "bucket": "",
+            "endpoint": "",
+            "error": "В админке не включён или не заполнен S3 (Core → Настройки хранилища медиа). Локальное сохранение отключено — загрузки будут падать с ошибкой.",
+        }
+    endpoint = (getattr(config, "endpoint_url", None) or "").strip().rstrip("/")
+    try:
+        from storages.backends.s3 import S3Storage
+        opts = _build_s3_opts(config)
+        S3Storage(**opts)
+        return {"source": "db", "bucket": config.bucket_name, "endpoint": endpoint or "(по умолчанию)", "error": None}
+    except Exception as e:
+        return {"source": "db", "bucket": config.bucket_name, "endpoint": endpoint, "error": str(e)}
+
+
 def _build_s3_opts(config):
     """Параметры для S3Storage: endpoint без слэша в конце, s3v4 для кастомных endpoint."""
     endpoint = (getattr(config, "endpoint_url", None) or "").strip().rstrip("/")
