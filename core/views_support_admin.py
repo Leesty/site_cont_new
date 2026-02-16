@@ -202,12 +202,12 @@ def admin_user_lead_stats(request: HttpRequest, user_id: int) -> HttpResponse:
     target_user = get_object_or_404(User, pk=user_id)
     today_start, today_end, yesterday_start, yesterday_end = _day_bounds_lead_stats()
     today_count = Lead.objects.filter(
-        user=target_user, created_at__gte=today_start, created_at__lt=today_end
+        user=target_user, status=Lead.Status.APPROVED, created_at__gte=today_start, created_at__lt=today_end
     ).count()
     yesterday_count = Lead.objects.filter(
-        user=target_user, created_at__gte=yesterday_start, created_at__lt=yesterday_end
+        user=target_user, status=Lead.Status.APPROVED, created_at__gte=yesterday_start, created_at__lt=yesterday_end
     ).count()
-    total_count = Lead.objects.filter(user=target_user).count()
+    total_count = Lead.objects.filter(user=target_user, status=Lead.Status.APPROVED).count()
     return render(
         request,
         "core/admin_user_lead_stats.html",
@@ -441,7 +441,7 @@ def admin_user_leads_export(request: HttpRequest, user_id: int, period: str) -> 
     if period not in ("today", "yesterday", "all"):
         return HttpResponseForbidden("Недопустимый период.")
     target_user = get_object_or_404(User, pk=user_id)
-    leads_qs = Lead.objects.filter(user=target_user).select_related("lead_type", "base_type").order_by("-created_at")
+    leads_qs = Lead.objects.filter(user=target_user, status=Lead.Status.APPROVED).select_related("lead_type", "base_type").order_by("-created_at")
     if period in ("today", "yesterday"):
         today_start, today_end, yesterday_start, yesterday_end = _day_bounds_lead_stats()
         if period == "today":
@@ -577,13 +577,13 @@ def admin_stats(request: HttpRequest) -> HttpResponse:
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
 
-    total_leads_week = Lead.objects.filter(created_at__gte=week_ago).count()
-    total_leads_month = Lead.objects.filter(created_at__gte=month_ago).count()
-    total_leads_all = Lead.objects.count()
+    total_leads_week = Lead.objects.filter(status=Lead.Status.APPROVED, created_at__gte=week_ago).count()
+    total_leads_month = Lead.objects.filter(status=Lead.Status.APPROVED, created_at__gte=month_ago).count()
+    total_leads_all = Lead.objects.filter(status=Lead.Status.APPROVED).count()
 
-    q_week = Lead.objects.filter(created_at__gte=week_ago).values("lead_type__name").annotate(c=Count("id"))
-    q_month = Lead.objects.filter(created_at__gte=month_ago).values("lead_type__name").annotate(c=Count("id"))
-    q_all = Lead.objects.values("lead_type__name").annotate(c=Count("id"))
+    q_week = Lead.objects.filter(status=Lead.Status.APPROVED, created_at__gte=week_ago).values("lead_type__name").annotate(c=Count("id"))
+    q_month = Lead.objects.filter(status=Lead.Status.APPROVED, created_at__gte=month_ago).values("lead_type__name").annotate(c=Count("id"))
+    q_all = Lead.objects.filter(status=Lead.Status.APPROVED).values("lead_type__name").annotate(c=Count("id"))
 
     leads_week = {x["lead_type__name"] or "Без категории": x["c"] for x in q_week}
     leads_month = {x["lead_type__name"] or "Без категории": x["c"] for x in q_month}
@@ -1069,8 +1069,8 @@ def download_leads_excel(request: HttpRequest) -> HttpResponse:
     )
 
     leads = (
-        Lead.objects.select_related("user", "lead_type", "base_type")
-        .all()
+        Lead.objects.filter(status=Lead.Status.APPROVED)
+        .select_related("user", "lead_type", "base_type")
         .order_by("-created_at")
     )
 

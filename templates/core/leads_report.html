@@ -2,6 +2,11 @@
 
 {% block title %}Отчёт по лидам — Партнёрка{% endblock %}
 
+{% block head_extra %}
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
+{% endblock %}
+
 {% block content %}
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <h1 class="h4 mb-0">Отчёт по лидам</h1>
@@ -192,5 +197,22 @@
       });
     }
   })();
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ru.js"></script>
+  <script>
+    (function() {
+      var el = document.getElementById('id_lead_date');
+      if (el && typeof flatpickr !== 'undefined') {
+        flatpickr(el, {
+          dateFormat: 'Y-m-d',
+          locale: 'ru',
+          allowInput: false,
+          disableMobile: true,
+          maxDate: 'today',
+          theme: 'dark'
+        });
+      }
+    })();
   </script>
 {% endblock %}

@@ -92,9 +92,11 @@ class LeadReportForm(forms.ModelForm):
             "lead_date": forms.DateInput(
                 format="%Y-%m-%d",
                 attrs={
-                    "type": "date",
+                    "type": "text",
                     "class": "form-control",
+                    "readonly": "readonly",
                     "style": "background-color: rgba(15, 23, 42, 0.95); border: 1px solid rgba(55, 65, 81, 0.9); color: #e5e7eb; cursor: pointer;",
+                    "placeholder": "Нажмите для выбора даты",
                 }
             ),
             "raw_contact": forms.TextInput(
