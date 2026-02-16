@@ -10,7 +10,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Case, Count, F, IntegerField, Max, Q, Value, When
+from django.db.models import Case, Count, F, IntegerField, Max, Q, Sum, Value, When
 from django.http import FileResponse, HttpRequest, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -277,14 +277,16 @@ def admin_lead_approve(request: HttpRequest, user_id: int, lead_id: int) -> Http
     """Одобрить лид: начислить пользователю LEAD_APPROVE_REWARD руб., статус — одобрен."""
     if not _require_support(request):
         return HttpResponseForbidden("Недостаточно прав.")
-    lead = get_object_or_404(Lead, pk=lead_id, user_id=user_id)
-    if lead.status == Lead.Status.APPROVED:
-        messages.info(request, "Лид уже одобрен.")
-        return redirect("admin_user_leads_list", user_id=user_id)
-    if lead.status not in (Lead.Status.PENDING, Lead.Status.REWORK):
-        messages.warning(request, "Можно одобрять только лиды на проверке или на доработке.")
-        return redirect("admin_user_leads_list", user_id=user_id)
     with transaction.atomic():
+        lead = Lead.objects.select_for_update().filter(pk=lead_id, user_id=user_id).select_related("user").first()
+        if not lead:
+            return redirect("admin_user_leads_list", user_id=user_id)
+        if lead.status == Lead.Status.APPROVED:
+            messages.info(request, "Лид уже одобрен.")
+            return redirect("admin_user_leads_list", user_id=user_id)
+        if lead.status not in (Lead.Status.PENDING, Lead.Status.REWORK):
+            messages.warning(request, "Можно одобрять только лиды на проверке или на доработке.")
+            return redirect("admin_user_leads_list", user_id=user_id)
         lead.status = Lead.Status.APPROVED
         lead.rejection_reason = ""
         lead.rework_comment = ""
@@ -517,6 +519,7 @@ def admin_all_users(request: HttpRequest) -> HttpResponse:
         )
     else:
         users_list = User.objects.all().order_by("-date_joined")
+    total_balance = User.objects.aggregate(s=Sum("balance"))["s"] or 0
     return render(
         request,
         "core/admin_all_users.html",
@@ -526,6 +529,7 @@ def admin_all_users(request: HttpRequest) -> HttpResponse:
             "total_users_count": total_users_count,
             "active_today_count": active_today_count,
             "active_yesterday_count": active_yesterday_count,
+            "total_balance": total_balance,
         },
     )
 
@@ -689,22 +693,31 @@ def admin_withdrawal_requests(request: HttpRequest) -> HttpResponse:
         req_id = request.POST.get("request_id")
         action = request.POST.get("action")
         if req_id and action in ("approve", "reject"):
-            wreq = get_object_or_404(WithdrawalRequest, pk=req_id, status="pending")
-            now = timezone.now()
-            if action == "approve":
-                wreq.status = "approved"
-                messages.success(
-                    request,
-                    f"Вывод @{wreq.user.username} на {wreq.amount} руб. одобрен. Баланс пользователя уже был обнулён при подаче заявки.",
+            with transaction.atomic():
+                wreq = (
+                    WithdrawalRequest.objects.select_for_update()
+                    .select_related("user")
+                    .filter(pk=req_id, status="pending")
+                    .first()
                 )
-            else:
-                wreq.user.balance = (wreq.user.balance or 0) + wreq.amount
-                wreq.user.save(update_fields=["balance"])
-                wreq.status = "rejected"
-                messages.info(request, f"Заявка на вывод от @{wreq.user.username} отклонена. Баланс восстановлен.")
-            wreq.processed_at = now
-            wreq.processed_by = request.user
-            wreq.save(update_fields=["status", "processed_at", "processed_by"])
+                if not wreq:
+                    messages.warning(request, "Заявка уже обработана или не найдена.")
+                    return redirect("admin_withdrawal_requests")
+                now = timezone.now()
+                if action == "approve":
+                    wreq.status = "approved"
+                    messages.success(
+                        request,
+                        f"Вывод @{wreq.user.username} на {wreq.amount} руб. одобрен. Баланс пользователя уже был обнулён при подаче заявки.",
+                    )
+                else:
+                    wreq.user.balance = (wreq.user.balance or 0) + wreq.amount
+                    wreq.user.save(update_fields=["balance"])
+                    wreq.status = "rejected"
+                    messages.info(request, f"Заявка на вывод от @{wreq.user.username} отклонена. Баланс восстановлен.")
+                wreq.processed_at = now
+                wreq.processed_by = request.user
+                wreq.save(update_fields=["status", "processed_at", "processed_by"])
             return redirect("admin_withdrawal_requests")
     pending = WithdrawalRequest.objects.filter(status="pending").select_related("user").order_by("created_at")
     history = (
@@ -712,10 +725,17 @@ def admin_withdrawal_requests(request: HttpRequest) -> HttpResponse:
         .select_related("user", "processed_by")
         .order_by("-created_at")[:200]
     )
+    total_approved_withdrawals = (
+        WithdrawalRequest.objects.filter(status="approved").aggregate(s=Sum("amount"))["s"] or 0
+    )
     return render(
         request,
         "core/admin_withdrawal_requests.html",
-        {"pending_requests": pending, "history_requests": history},
+        {
+            "pending_requests": pending,
+            "history_requests": history,
+            "total_approved_withdrawals": total_approved_withdrawals,
+        },
     )
 
 

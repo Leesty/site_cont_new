@@ -196,7 +196,7 @@ class LeadReworkUserForm(forms.Form):
     )
     attachment = forms.FileField(
         label="Скриншот или видео",
-        help_text="Можно загрузить новый файл или оставить текущий.",
+        help_text="Обязательно: либо оставьте текущее вложение, либо загрузите новое (макс. 30 МБ).",
         required=False,
         widget=forms.FileInput(attrs={"class": "form-control", "accept": "image/*,.mp4,.mov,.webm,.m4v,.3gp"}),
     )

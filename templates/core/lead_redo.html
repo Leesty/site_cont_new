@@ -15,10 +15,10 @@
   {% endif %}
 
   <p class="text-muted mb-3">
-    Исправьте контакт/ссылку, комментарий или загрузите новый скриншот/видео. После отправки лид снова попадёт на проверку.
+    Исправьте контакт/ссылку, комментарий или загрузите новый скриншот/видео. Вложение обязательно: либо текущее, либо новое (макс. 30 МБ). После отправки лид снова попадёт на проверку.
   </p>
 
-  <form method="post" enctype="multipart/form-data" class="mb-3">
+  <form method="post" enctype="multipart/form-data" class="mb-3" id="lead-redo-form">
     {% csrf_token %}
     <div class="mb-3">
       <label class="form-label" for="id_raw_contact">{{ form.raw_contact.label }}</label>
@@ -31,13 +31,80 @@
       {{ form.comment }}
       {% if form.comment.errors %}<div class="text-danger small">{% for error in form.comment.errors %}{{ error }}{% endfor %}</div>{% endif %}
     </div>
-    <div class="mb-3">
+    <div class="mb-3" id="lead-redo-attachment-wrap" data-has-attachment="{% if lead.attachment %}1{% else %}0{% endif %}">
       <label class="form-label" for="id_attachment">{{ form.attachment.label }}</label>
       {{ form.attachment }}
       {% if form.attachment.help_text %}<div class="form-text">{{ form.attachment.help_text }}</div>{% endif %}
+      <div id="lead-redo-attachment-status" class="small mt-1" aria-live="polite"></div>
       {% if form.attachment.errors %}<div class="text-danger small">{% for error in form.attachment.errors %}{{ error }}{% endfor %}</div>{% endif %}
     </div>
-    <button type="submit" class="btn btn-primary">Отправить на проверку</button>
+    <button type="submit" class="btn btn-primary" id="lead-redo-submit">Отправить на проверку</button>
     <a class="btn btn-outline-secondary ms-2" href="{% url 'dashboard' %}">Отмена</a>
   </form>
+
+  <script>
+  (function() {
+    var MAX_SIZE = 30 * 1024 * 1024;
+    var ALLOWED_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'mp4', 'mov', 'webm', 'm4v', '3gp'];
+    var wrap = document.getElementById('lead-redo-attachment-wrap');
+    var input = document.getElementById('id_attachment');
+    var statusEl = document.getElementById('lead-redo-attachment-status');
+    var submitBtn = document.getElementById('lead-redo-submit');
+    var form = document.getElementById('lead-redo-form');
+    var hasAttachment = wrap && wrap.getAttribute('data-has-attachment') === '1';
+
+    function formatSize(bytes) {
+      if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' МБ';
+      return (bytes / 1024).toFixed(0) + ' КБ';
+    }
+
+    function setStatus(msg, isError) {
+      if (!statusEl) return;
+      statusEl.textContent = msg;
+      statusEl.className = 'small mt-1 ' + (isError ? 'text-danger' : 'text-success');
+    }
+
+    function checkFile() {
+      if (hasAttachment && (!input || !input.files || !input.files.length)) {
+        submitBtn.disabled = false;
+        setStatus('Текущее вложение сохранено. Можно отправить или загрузить новый файл (макс. 30 МБ).', false);
+        return;
+      }
+      if (!input || !input.files || !input.files.length) {
+        submitBtn.disabled = true;
+        setStatus('Выберите скриншот или видео — после проверки файла кнопка «Отправить на проверку» станет активной.', false);
+        return;
+      }
+      var file = input.files[0];
+      var ext = (file.name || '').split('.').pop().toLowerCase();
+      if (ALLOWED_EXT.indexOf(ext) === -1) {
+        submitBtn.disabled = true;
+        setStatus('Разрешены только изображения и видео (jpg, png, gif, webp, mp4, mov и т.д.). Выберите другой файл.', true);
+        return;
+      }
+      if (file.size > MAX_SIZE) {
+        submitBtn.disabled = true;
+        setStatus('Файл слишком большой (' + formatSize(file.size) + '). Максимум 30 МБ. Сожмите видео или приложите скриншот.', true);
+        return;
+      }
+      submitBtn.disabled = false;
+      setStatus('Файл выбран: ' + file.name + ' (' + formatSize(file.size) + '). Можно отправить на проверку.', false);
+    }
+
+    if (input) {
+      input.addEventListener('change', function() {
+        hasAttachment = false;
+        checkFile();
+      });
+    }
+    checkFile();
+
+    if (form && submitBtn) {
+      form.addEventListener('submit', function() {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Отправка…';
+      });
+    }
+  })();
+  </script>
 {% endblock %}

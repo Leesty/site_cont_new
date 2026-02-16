@@ -393,17 +393,26 @@ def request_withdrawal_create(request: HttpRequest) -> HttpResponse:
                     "payout_details": payout_details,
                 },
             )
-        WithdrawalRequest.objects.create(
-            user=user,
-            amount=balance,
-            payout_details=payout_details,
-            status="pending",
-        )
-        user.balance = 0
-        user.save(update_fields=["balance"])
+        with transaction.atomic():
+            user_refresh = User.objects.select_for_update().get(pk=user.pk)
+            current_balance = getattr(user_refresh, "balance", 0) or 0
+            if WithdrawalRequest.objects.filter(user=user_refresh, status="pending").exists():
+                messages.info(request, "У вас уже есть заявка на вывод на рассмотрении.")
+                return redirect("dashboard")
+            if current_balance < withdrawal_min:
+                messages.warning(request, f"Заявка на вывод доступна при балансе от {withdrawal_min} руб.")
+                return redirect("dashboard")
+            WithdrawalRequest.objects.create(
+                user=user_refresh,
+                amount=current_balance,
+                payout_details=payout_details,
+                status="pending",
+            )
+            user_refresh.balance = 0
+            user_refresh.save(update_fields=["balance"])
         messages.success(
             request,
-            f"Заявка на вывод {balance} руб. отправлена. Баланс обнулён. Ожидайте решения администратора.",
+            f"Заявка на вывод {current_balance} руб. отправлена. Баланс обнулён. Ожидайте решения администратора.",
         )
         return redirect("dashboard")
 
@@ -545,27 +554,34 @@ def lead_redo(request: HttpRequest, lead_id: int) -> HttpResponse:
     if request.method == "POST":
         form = LeadReworkUserForm(request.POST, request.FILES)
         if form.is_valid():
-            new_contact = form.cleaned_data["raw_contact"].strip()
-            if _lead_exists_globally(new_contact, exclude_lead_id=lead.id):
-                messages.error(
-                    request,
-                    "Такой контакт уже есть в базе отчётов. Укажите другой контакт или оставьте прежний.",
+            # Вложение обязательно: либо уже есть у лида, либо загружено в форме
+            if not lead.attachment and not form.cleaned_data.get("attachment"):
+                form.add_error(
+                    "attachment",
+                    "Приложите скриншот или видео. Без вложения отправить на проверку нельзя.",
                 )
             else:
-                lead.raw_contact = new_contact
-                lead.source = lead.raw_contact or ""
-                lead.normalized_contact = normalize_lead_contact(lead.raw_contact)
-                lead.comment = form.cleaned_data.get("comment") or ""
-                update_fields = ["raw_contact", "source", "normalized_contact", "comment", "status", "rework_comment", "updated_at"]
-                if form.cleaned_data.get("attachment"):
-                    lead.attachment = form.cleaned_data["attachment"]
-                    update_fields.append("attachment")
-                lead.status = Lead.Status.PENDING
-                lead.rework_comment = ""
-                lead.save(update_fields=update_fields)
-                compress_lead_attachment(lead)
-                messages.success(request, "Лид отправлен на повторную проверку.")
-                return redirect("leads_my_list")
+                new_contact = form.cleaned_data["raw_contact"].strip()
+                if _lead_exists_globally(new_contact, exclude_lead_id=lead.id):
+                    messages.error(
+                        request,
+                        "Такой контакт уже есть в базе отчётов. Укажите другой контакт или оставьте прежний.",
+                    )
+                else:
+                    lead.raw_contact = new_contact
+                    lead.source = lead.raw_contact or ""
+                    lead.normalized_contact = normalize_lead_contact(lead.raw_contact)
+                    lead.comment = form.cleaned_data.get("comment") or ""
+                    update_fields = ["raw_contact", "source", "normalized_contact", "comment", "status", "rework_comment", "updated_at"]
+                    if form.cleaned_data.get("attachment"):
+                        lead.attachment = form.cleaned_data["attachment"]
+                        update_fields.append("attachment")
+                    lead.status = Lead.Status.PENDING
+                    lead.rework_comment = ""
+                    lead.save(update_fields=update_fields)
+                    compress_lead_attachment(lead)
+                    messages.success(request, "Лид отправлен на повторную проверку.")
+                    return redirect("leads_my_list")
     else:
         form = LeadReworkUserForm(
             initial={
