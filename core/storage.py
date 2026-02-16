@@ -13,7 +13,7 @@ CACHE_SECONDS = 300
 
 
 def get_media_config_from_db():
-    """Возвращает единственную запись MediaStorageConfig из БД (с кэшем)."""
+    """Возвращает единственную запись MediaStorageConfig из БД (с кэшем). Не бросает исключений."""
     now = time.time()
     if _MEDIA_CONFIG_CACHE["config"] is not None and now < _MEDIA_CONFIG_CACHE["cache_until"]:
         return _MEDIA_CONFIG_CACHE["config"]
@@ -25,7 +25,10 @@ def get_media_config_from_db():
         _MEDIA_CONFIG_CACHE["config"] = config
         _MEDIA_CONFIG_CACHE["cache_until"] = now + CACHE_SECONDS
         return config
-    except Exception:
+    except Exception as e:
+        logger.debug("MediaStorageConfig from DB failed (using local storage): %s", e)
+        _MEDIA_CONFIG_CACHE["config"] = None
+        _MEDIA_CONFIG_CACHE["cache_until"] = now + 60  # кэшируем «нет конфига» на 1 мин, чтобы не долбить БД
         return None
 
 

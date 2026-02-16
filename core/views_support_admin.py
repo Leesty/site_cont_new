@@ -10,6 +10,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
+from django.db.utils import OperationalError, ProgrammingError
 from django.db.models import Case, Count, F, IntegerField, Max, Q, Sum, Value, When
 from django.http import FileResponse, HttpRequest, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -249,14 +250,27 @@ def admin_leads_all_new(request: HttpRequest) -> HttpResponse:
     """Единая страница «Новые отчёты»: все лиды на проверке и на доработке от всех пользователей."""
     if not _require_support(request):
         return HttpResponseForbidden("Недостаточно прав.")
-    qs = (
-        Lead.objects.filter(status__in=(Lead.Status.PENDING, Lead.Status.REWORK))
-        .select_related("user", "lead_type", "base_type")
-        .order_by("-created_at")
-    )
-    paginator = Paginator(qs, 50)
-    page_number = request.GET.get("page", 1)
-    page_obj = paginator.get_page(page_number)
+    try:
+        qs = (
+            Lead.objects.filter(status__in=(Lead.Status.PENDING, Lead.Status.REWORK))
+            .select_related("user", "lead_type", "base_type")
+            .order_by("-created_at")
+        )
+        paginator = Paginator(qs, 50)
+        page_number = request.GET.get("page", 1)
+        page_obj = paginator.get_page(page_number)
+    except (OperationalError, ProgrammingError) as e:
+        import logging
+        logging.getLogger(__name__).exception("admin_leads_all_new: DB error (run migrate?): %s", e)
+        return HttpResponse(
+            "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Ошибка</title></head><body style='font-family:sans-serif;padding:2rem;'>"
+            "<h1>Ошибка базы данных</h1>"
+            "<p>Страница «Новые отчёты» не загружается. Часто это из‑за неприменённых миграций после обновления кода.</p>"
+            "<p><strong>На сервере выполните:</strong> <code>python manage.py migrate</code></p>"
+            "<p><a href='/staff/'>← В кабинет</a></p></body></html>",
+            status=500,
+            content_type="text/html; charset=utf-8",
+        )
     lead_approve_reward = getattr(settings, "LEAD_APPROVE_REWARD", 40)
     return render(
         request,
