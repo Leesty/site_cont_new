@@ -284,12 +284,32 @@ def admin_leads_all_new(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def admin_media_storage_status(request: HttpRequest) -> HttpResponse:
-    """Диагностика: куда сохраняются медиа (S3 из env или из админки), подключается ли S3."""
+    """Диагностика: куда сохраняются медиа (S3 из env или из админки), подключается ли S3. POST с action=test_write — реальная проверка записи."""
     if not _require_support(request):
         return HttpResponseForbidden("Недостаточно прав.")
+    from django.core.files.storage import default_storage
+    from django.core.files.base import ContentFile
     from core.storage import get_media_storage_diagnostic
+    write_result = None
+    if request.method == "POST" and request.POST.get("action") == "test_write":
+        test_name = "_media_write_test.txt"
+        try:
+            default_storage.save(test_name, ContentFile(b"test-write-check"))
+            exists = default_storage.exists(test_name)
+            default_storage.delete(test_name)
+            if exists:
+                write_result = {"ok": True, "message": "Запись в хранилище прошла успешно. Файл создан и удалён. Если это S3 — проверьте бакет в панели (возможно, обновление счётчика с задержкой)."}
+            else:
+                write_result = {"ok": False, "message": "Файл записан, но сразу не найден (exists() вернул False)."}
+        except Exception as e:
+            import traceback
+            write_result = {"ok": False, "message": str(e), "detail": traceback.format_exc()}
     diag = get_media_storage_diagnostic()
-    return render(request, "core/admin_media_storage_status.html", {"diag": diag})
+    return render(
+        request,
+        "core/admin_media_storage_status.html",
+        {"diag": diag, "write_result": write_result},
+    )
 
 
 LEAD_APPROVE_REWARD = getattr(settings, "LEAD_APPROVE_REWARD", 40)

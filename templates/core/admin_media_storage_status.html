@@ -16,15 +16,47 @@
         <p class="mb-2"><strong>Сейчас используется S3 из переменных окружения</strong> (<code>USE_S3_MEDIA=1</code>).</p>
         <p class="mb-1">Бакет в env: <code>{{ diag.bucket|default:"— не задан" }}</code></p>
         <p class="mb-0">Endpoint: <code>{{ diag.endpoint|default:"— по умолчанию" }}</code></p>
-        <p class="mt-2 text-muted small">
+        <form method="post" action="" class="mt-2 mb-2">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="test_write">
+          <button type="submit" class="btn btn-primary btn-sm">Проверить запись в S3</button>
+        </form>
+        {% if write_result and diag.source == "env" %}
+          {% if write_result.ok %}
+            <div class="alert alert-success py-2 mb-2">{{ write_result.message }}</div>
+          {% else %}
+            <div class="alert alert-danger py-2 mb-2"><strong>Ошибка:</strong> {{ write_result.message }}{% if write_result.detail %}<pre class="small mt-2 mb-0">{{ write_result.detail }}</pre>{% endif %}</div>
+          {% endif %}
+        {% endif %}
+        <p class="text-muted small mb-0">
           Если в панели S3 у вас другой бакет (например 06dcf8ea-...), то либо задайте в env тот же <code>AWS_STORAGE_BUCKET_NAME</code>, либо уберите <code>USE_S3_MEDIA</code> и настройте S3 в админке (Core → Настройки хранилища медиа).
         </p>
       {% elif diag.source == "db" and not diag.error %}
         <p class="mb-2 text-success"><strong>S3 из админки подключается.</strong></p>
         <p class="mb-1">Бакет: <code>{{ diag.bucket }}</code></p>
         <p class="mb-0">Endpoint: <code>{{ diag.endpoint }}</code></p>
-        <p class="mt-2 text-muted small">
-          Новые загрузки должны попадать в этот бакет. Если в панели по-прежнему 0 ГБ — задеплойте последнюю версию кода (без fallback на локальный диск) и загрузите отчёт заново; проверьте логи при загрузке: должна быть строка «Media storage: сохранение в S3».
+        <p class="mt-2 mb-2">
+          <strong>Проверка записи:</strong> нажмите кнопку — в хранилище будет записан тестовый файл и сразу удалён (тот же путь, что при загрузке отчётов).
+        </p>
+        <form method="post" action="" class="mb-3">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="test_write">
+          <button type="submit" class="btn btn-primary btn-sm">Проверить запись в S3</button>
+        </form>
+        {% if write_result %}
+          {% if write_result.ok %}
+            <div class="alert alert-success py-2 mb-2">{{ write_result.message }}</div>
+          {% else %}
+            <div class="alert alert-danger py-2 mb-2">
+              <strong>Ошибка при записи:</strong><br>{{ write_result.message }}
+              {% if write_result.detail %}
+                <pre class="small mt-2 mb-0 text-start" style="white-space:pre-wrap;font-size:0.75rem;">{{ write_result.detail }}</pre>
+              {% endif %}
+            </div>
+          {% endif %}
+        {% endif %}
+        <p class="text-muted small mb-0">
+          Если запись прошла успешно, но в панели 0 ГБ — подождите минуту (счётчик может обновляться с задержкой) или откройте вкладку «Объекты» в бакете. Если при нажатии кнопки выше видите ошибку — именно она мешает и загрузкам отчётов.
         </p>
       {% elif diag.source == "db" and diag.error %}
         <p class="mb-2 text-danger"><strong>Ошибка подключения к S3</strong></p>
