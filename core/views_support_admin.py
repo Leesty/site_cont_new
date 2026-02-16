@@ -11,7 +11,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Case, Count, F, IntegerField, Max, Q, Sum, Value, When
-from django.http import FileResponse, HttpRequest, HttpResponse, HttpResponseForbidden
+from django.http import FileResponse, HttpRequest, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -295,7 +295,10 @@ def admin_lead_approve(request: HttpRequest, user_id: int, lead_id: int) -> Http
         lead.save(update_fields=["status", "rejection_reason", "rework_comment", "reviewed_at", "reviewed_by"])
         lead.user.balance = (getattr(lead.user, "balance", 0) or 0) + LEAD_APPROVE_REWARD
         lead.user.save(update_fields=["balance"])
-    messages.success(request, f"Лид #{lead_id} одобрен. Пользователю начислено {LEAD_APPROVE_REWARD} руб.")
+    msg = f"Лид #{lead_id} одобрен. Пользователю начислено {LEAD_APPROVE_REWARD} руб."
+    messages.success(request, msg)
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return JsonResponse({"success": True, "message": msg})
     next_url = request.GET.get("next") or request.POST.get("next")
     if next_url:
         from django.utils.http import url_has_allowed_host_and_scheme

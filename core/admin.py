@@ -94,3 +94,33 @@ class WithdrawalRequestAdmin(admin.ModelAdmin):
     search_fields = ("user__username",)
     readonly_fields = ("user", "amount", "payout_details", "created_at")
 
+
+@admin.register(models.MediaStorageConfig)
+class MediaStorageConfigAdmin(admin.ModelAdmin):
+    list_display = ("id", "enabled", "bucket_name", "endpoint_url", "region_name")
+    list_display_links = ("id", "bucket_name")
+    list_editable = ("enabled",)
+    fieldsets = (
+        (None, {"fields": ("enabled",)}),
+        (
+            "S3 (Timeweb Cloud или другой)",
+            {
+                "fields": ("bucket_name", "access_key_id", "secret_access_key", "endpoint_url", "region_name"),
+                "description": "Заполните и включите «enabled», чтобы загрузки (фото/видео лидов) сохранялись в S3 и не терялись при редеплое. Endpoint для Timeweb: https://s3.timeweb.cloud",
+            },
+        ),
+    )
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        from .storage import clear_media_config_cache
+        clear_media_config_cache()
+
+    def add_view(self, request, form_url="", extra_context=None):
+        from django.shortcuts import redirect
+        from django.urls import reverse
+        obj = models.MediaStorageConfig.objects.first()
+        if obj:
+            return redirect(reverse("admin:core_mediastorageconfig_change", args=[obj.pk]))
+        return super().add_view(request, form_url, extra_context)
+

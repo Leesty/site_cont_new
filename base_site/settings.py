@@ -105,8 +105,29 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 
-MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+# Медиафайлы (вложения лидов и т.д.): по умолчанию — локальный каталог (при редеплое теряются).
+# Вариант 1: S3 из переменных окружения (USE_S3_MEDIA=1 + AWS_*).
+# Вариант 2: S3 из настроек на сайте — админка → «Настройки хранилища медиа (S3)», включить и заполнить.
+USE_S3_MEDIA_ENV = os.getenv("USE_S3_MEDIA", "").strip().lower() in ("1", "true", "yes")
+
+if USE_S3_MEDIA_ENV:
+    AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "")
+    AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+    AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME", "")
+    AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME", "ru-1")
+    _s3_endpoint = os.getenv("AWS_S3_ENDPOINT_URL", "").strip()
+    if _s3_endpoint:
+        AWS_S3_ENDPOINT_URL = _s3_endpoint
+    AWS_S3_OBJECT_PARAMETERS = {"CacheControl": "max-age=86400"}
+    AWS_DEFAULT_ACL = None
+    DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
+    MEDIA_URL = "/media/"
+    MEDIA_ROOT = BASE_DIR / "media"
+else:
+    MEDIA_URL = "/media/"
+    MEDIA_ROOT = BASE_DIR / "media"
+    # Конфиг из БД: админка → «Настройки хранилища медиа (S3)». Если включено — загрузки в S3.
+    DEFAULT_FILE_STORAGE = "core.storage.ConfigurableMediaStorage"
 
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

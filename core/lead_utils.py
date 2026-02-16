@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import os
 import re
 from typing import TYPE_CHECKING
 
@@ -150,7 +151,8 @@ def determine_base_type_for_contact(raw_contact: str, user: User) -> BaseType | 
 
 
 def compress_lead_attachment(lead) -> bool:
-    """Сжимает файл вложения лида, если это изображение. Перезаписывает файл на месте."""
+    """Сжимает файл вложения лида, если это изображение. Перезаписывает файл на месте.
+    При хранении в S3 (нет локального path) сжатие не выполняется."""
     if not lead or not getattr(lead, "attachment", None) or not lead.attachment:
         return False
     try:
@@ -159,7 +161,7 @@ def compress_lead_attachment(lead) -> bool:
         return False
 
     path = getattr(lead.attachment, "path", None)
-    if not path:
+    if not path or not os.path.exists(path):
         return False
     try:
         with Image.open(path) as img:

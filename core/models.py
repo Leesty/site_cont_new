@@ -448,3 +448,21 @@ class BasesImportJob(TimeStampedModel):
     def __str__(self) -> str:
         return f"Импорт {self.get_status_display()} ({self.created_at})"
 
+
+class MediaStorageConfig(models.Model):
+    """Настройки S3 для медиафайлов (вложения лидов). Одна запись — конфиг с сайта, без переменных окружения.
+    Если включено и заполнено — загрузки сохраняются в S3 и не теряются при редеплое."""
+    enabled = models.BooleanField(default=False, help_text="Включить хранение медиа в S3")
+    bucket_name = models.CharField(max_length=255, blank=True, help_text="Имя бакета (Timeweb Cloud S3)")
+    access_key_id = models.CharField(max_length=255, blank=True, verbose_name="Access Key ID")
+    secret_access_key = models.CharField(max_length=255, blank=True, verbose_name="Secret Access Key")
+    endpoint_url = models.URLField(max_length=500, blank=True, help_text="Например https://s3.timeweb.cloud")
+    region_name = models.CharField(max_length=64, blank=True, default="ru-1")
+
+    class Meta:
+        verbose_name = "Настройки хранилища медиа (S3)"
+        verbose_name_plural = "Настройки хранилища медиа (S3)"
+
+    def __str__(self) -> str:
+        return f"S3: {self.bucket_name or 'не задано'}" + (" (вкл.)" if self.enabled else " (выкл.)")
+
