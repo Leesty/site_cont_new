@@ -20,7 +20,7 @@
     <span class="ms-2">
       <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_user_leads_export' target_user.pk 'today' %}">За сегодня</a>
       <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_user_leads_export' target_user.pk 'yesterday' %}">За вчера</a>
-      <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_user_leads_export' target_user.pk 'all' %}">Все лиды</a>
+      <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_user_leads_export' target_user.pk 'all' %}" title="Только одобренные">Одобренные</a>
     </span>
   </div>
   <div class="mb-3">

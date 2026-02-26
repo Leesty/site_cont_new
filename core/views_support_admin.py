@@ -1046,7 +1046,7 @@ def download_bases_excel_category(request: HttpRequest, base_type_id: int) -> Ht
 
 @login_required
 def download_leads_excel(request: HttpRequest) -> HttpResponse:
-    """Выгрузка всех лидов в один Excel."""
+    """Выгрузка только одобренных лидов в один Excel."""
 
     if not _require_support(request):
         return HttpResponseForbidden("Недостаточно прав.")

@@ -9,7 +9,7 @@
     <div class="d-flex flex-wrap gap-2">
       <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_user_leads_export' target_user.pk 'today' %}">Скачать за сегодня</a>
       <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_user_leads_export' target_user.pk 'yesterday' %}">Скачать за вчера</a>
-      <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_user_leads_export' target_user.pk 'all' %}">Скачать все (Excel)</a>
+      <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_user_leads_export' target_user.pk 'all' %}" title="Только одобренные отчёты">Скачать одобренные (Excel)</a>
       <a class="btn btn-outline-secondary btn-sm" href="{% url 'admin_user_lead_stats' target_user.pk %}">Статистика</a>
       <a class="btn btn-outline-secondary btn-sm" href="{% url 'admin_all_users' %}">← Все пользователи</a>
       <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard' %}">← В кабинет</a>
